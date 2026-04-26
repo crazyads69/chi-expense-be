@@ -76,6 +76,19 @@
 
 **Requirements:** QAL-01, QAL-02, QAL-03, QAL-04
 
+**Plans:** 5 plans
+
+**Plan list:**
+- [ ] `04-01-PLAN.md` — Core Database Service Unit Tests (Wave 1)
+- [ ] `04-02-PLAN.md` — Input, Insights & RateLimitGuard Unit Tests (Wave 1)
+- [ ] `04-03-PLAN.md` — Utility Functions Unit Tests (Wave 1)
+- [ ] `04-04-PLAN.md` — E2E Test Suite (Wave 2)
+- [ ] `04-05-PLAN.md` — CI Pipeline Configuration (Wave 2)
+
+**Wave dependencies:**
+- Wave 1 (plans 01, 02, 03) can execute in parallel — no file overlap
+- Wave 2 (plans 04, 05) runs after Wave 1 — E2E tests depend on test infrastructure, CI depends on all tests being written
+
 **Success criteria:**
 1. Unit tests exist for all 6 services: `categories.service.spec.ts`, `transactions.service.spec.ts`, `input.service.spec.ts`, `insights.service.spec.ts`, `account.service.spec.ts`, `rate-limit.guard.spec.ts`
 2. Unit tests exist for utilities: `parseAmount` (Vietnamese regex), `lookupMerchant` (keyword matching), prompt formatting
@@ -149,11 +162,11 @@
 | SEC-03 | Phase 2 | Complete |
 | SEC-04 | Phase 2 | Complete |
 | SEC-05 | Phase 2 | Complete |
-| TST-01 | Phase 3 | Pending |
-| TST-02 | Phase 3 | Pending |
-| TST-03 | Phase 3 | Pending |
-| TST-04 | Phase 3 | Pending |
-| TST-05 | Phase 3 | Pending |
+| TST-01 | Phase 3 | Complete |
+| TST-02 | Phase 3 | Complete |
+| TST-03 | Phase 3 | Complete |
+| TST-04 | Phase 3 | Complete |
+| TST-05 | Phase 3 | Complete |
 | QAL-01 | Phase 4 | Pending |
 | QAL-02 | Phase 4 | Pending |
 | QAL-03 | Phase 4 | Pending |
