@@ -34,10 +34,10 @@ Requirements for code hardening milestone. Each maps to a roadmap phase.
 
 ### Automated Quality Gates
 
-- [ ] **QAL-01**: Unit tests cover all 6 NestJS services (categories, transactions, input, insights, account, rate-limit guard)
-- [ ] **QAL-02**: Unit tests cover utility functions (Vietnamese regex amount parsing, merchant keyword lookup, LLM prompt formatting)
-- [ ] **QAL-03**: E2E tests cover all 10 API endpoints with happy-path scenarios using test database
-- [ ] **QAL-04**: CI pipeline (GitHub Actions) runs `npm run lint`, `npm run test`, and `drizzle-kit check` on every PR
+- [x] **QAL-01**: Unit tests cover all 6 NestJS services (categories, transactions, input, insights, account, rate-limit guard)
+- [x] **QAL-02**: Unit tests cover utility functions (Vietnamese regex amount parsing, merchant keyword lookup, LLM prompt formatting)
+- [x] **QAL-03**: E2E tests cover all 10 API endpoints with happy-path scenarios using test database
+- [x] **QAL-04**: CI pipeline (GitHub Actions) runs `npm run lint`, `npm run test`, and `drizzle-kit check` on every PR
 
 ### Performance
 

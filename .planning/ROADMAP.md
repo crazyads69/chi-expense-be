@@ -105,6 +105,16 @@
 
 **Requirements:** PERF-01, PERF-02, PERF-03, PERF-04
 
+**Plans:** 3 plans
+
+**Plan list:**
+- [ ] `05-01-PLAN.md` — Transaction Pagination & Efficient Month Filtering (Wave 1)
+- [ ] `05-02-PLAN.md` — Insights SQL Aggregation (Wave 1)
+- [ ] `05-03-PLAN.md` — Vercel Deployment Configuration (Wave 1)
+
+**Wave dependencies:**
+- Wave 1 (plans 01, 02, 03) can execute in parallel — no file overlap between plans
+
 **Success criteria:**
 1. `GET /api/transactions?page=1&limit=50` returns `{ data: [...], total: 243, hasMore: true }` — not all rows
 2. `GET /api/insights` computes totals and category breakdowns via SQL `GROUP BY` and `SUM` — no in-memory `reduce()`
@@ -167,10 +177,10 @@
 | TST-03 | Phase 3 | Complete |
 | TST-04 | Phase 3 | Complete |
 | TST-05 | Phase 3 | Complete |
-| QAL-01 | Phase 4 | Pending |
-| QAL-02 | Phase 4 | Pending |
-| QAL-03 | Phase 4 | Pending |
-| QAL-04 | Phase 4 | Pending |
+| QAL-01 | Phase 4 | Complete |
+| QAL-02 | Phase 4 | Complete |
+| QAL-03 | Phase 4 | Complete |
+| QAL-04 | Phase 4 | Complete |
 | PERF-01 | Phase 5 | Pending |
 | PERF-02 | Phase 5 | Pending |
 | PERF-03 | Phase 5 | Pending |
