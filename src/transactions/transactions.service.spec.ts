@@ -80,9 +80,11 @@ describe('TransactionsService', () => {
 
       const result = await service.listByMonth('test-user');
 
-      expect(result).toHaveLength(2);
-      expect(result[0].id).toBe('tx-2');
-      expect(result[1].id).toBe('tx-1');
+      expect(result.data).toHaveLength(2);
+      expect(result.total).toBe(2);
+      expect(result.hasMore).toBe(false);
+      expect(result.data[0].id).toBe('tx-2');
+      expect(result.data[1].id).toBe('tx-1');
     });
 
     it('should filter by month parameter', async () => {
@@ -97,8 +99,42 @@ describe('TransactionsService', () => {
 
       const result = await service.listByMonth('test-user', '2026-04');
 
-      expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('tx-apr');
+      expect(result.data).toHaveLength(1);
+      expect(result.total).toBe(1);
+      expect(result.data[0].id).toBe('tx-apr');
+    });
+
+    it('should paginate results', async () => {
+      await createTestTransaction('test-user', {
+        id: 'tx-1',
+        createdAt: '2026-04-01T10:00:00.000Z',
+      });
+      await createTestTransaction('test-user', {
+        id: 'tx-2',
+        createdAt: '2026-04-02T10:00:00.000Z',
+      });
+
+      const result = await service.listByMonth('test-user', '2026-04', 1, 1);
+
+      expect(result.data).toHaveLength(1);
+      expect(result.total).toBe(2);
+      expect(result.hasMore).toBe(true);
+    });
+
+    it('should handle year boundary months', async () => {
+      await createTestTransaction('test-user', {
+        id: 'tx-dec',
+        createdAt: '2026-12-31T23:59:59.000Z',
+      });
+      await createTestTransaction('test-user', {
+        id: 'tx-jan',
+        createdAt: '2027-01-01T00:00:00.000Z',
+      });
+
+      const result = await service.listByMonth('test-user', '2026-12');
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].id).toBe('tx-dec');
     });
 
     it('should throw BadRequestException for invalid month format', async () => {

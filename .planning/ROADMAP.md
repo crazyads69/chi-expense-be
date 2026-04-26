@@ -181,10 +181,10 @@
 | QAL-02 | Phase 4 | Complete |
 | QAL-03 | Phase 4 | Complete |
 | QAL-04 | Phase 4 | Complete |
-| PERF-01 | Phase 5 | Pending |
-| PERF-02 | Phase 5 | Pending |
-| PERF-03 | Phase 5 | Pending |
-| PERF-04 | Phase 5 | Pending |
+| PERF-01 | Phase 5 | Complete |
+| PERF-02 | Phase 5 | Complete |
+| PERF-03 | Phase 5 | Complete |
+| PERF-04 | Phase 5 | Complete |
 | OBS-01 | Phase 6 | Pending |
 | OBS-02 | Phase 6 | Pending |
 | OBS-03 | Phase 6 | Pending |

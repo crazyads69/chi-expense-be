@@ -18,8 +18,20 @@ export class TransactionsController {
   constructor(private readonly transactionsService: TransactionsService) {}
 
   @Get()
-  async list(@Session() session: UserSession, @Query('month') month?: string) {
-    return this.transactionsService.listByMonth(session.user.id, month);
+  async list(
+    @Session() session: UserSession,
+    @Query('month') month?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const pageNum = page ? parseInt(page, 10) : undefined;
+    const limitNum = limit ? parseInt(limit, 10) : undefined;
+    return this.transactionsService.listByMonth(
+      session.user.id,
+      month,
+      pageNum,
+      limitNum,
+    );
   }
 
   @Post()

@@ -41,10 +41,10 @@ Requirements for code hardening milestone. Each maps to a roadmap phase.
 
 ### Performance
 
-- [ ] **PERF-01**: Transaction listing (`GET /api/transactions`) returns cursor-based paginated results with `{ data, total, hasMore }` metadata
-- [ ] **PERF-02**: Monthly insights use SQL aggregation (`GROUP BY`, `SUM`, `COUNT`) instead of in-memory JavaScript `reduce()`
-- [ ] **PERF-03**: Month filtering uses date range queries (`>= '2026-04-01' AND < '2026-05-01'`) instead of `LIKE 'YYYY-MM%'`
-- [ ] **PERF-04**: `vercel.json` configured with `maxDuration: 30` for LLM endpoints and `runtime: nodejs20.x`
+- [x] **PERF-01**: Transaction listing (`GET /api/transactions`) returns cursor-based paginated results with `{ data, total, hasMore }` metadata
+- [x] **PERF-02**: Monthly insights use SQL aggregation (`GROUP BY`, `SUM`, `COUNT`) instead of in-memory JavaScript `reduce()`
+- [x] **PERF-03**: Month filtering uses date range queries (`>= '2026-04-01' AND < '2026-05-01'`) instead of `LIKE 'YYYY-MM%'`
+- [x] **PERF-04**: `vercel.json` configured with `maxDuration: 30` for LLM endpoints and `runtime: nodejs20.x`
 
 ### Observability & Documentation
 

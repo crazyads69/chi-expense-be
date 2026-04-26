@@ -2,7 +2,7 @@ import { Injectable, BadRequestException, Logger, Inject } from '@nestjs/common'
 import { DRIZZLE } from '../db/db-token';
 import type { DrizzleDatabase } from '../db/db-token';
 import { transactions } from '../db/schema';
-import { eq, and, like } from 'drizzle-orm';
+import { eq, and, gte, lt, sql } from 'drizzle-orm';
 
 export interface CategoryBreakdown {
   category: string;
@@ -38,62 +38,52 @@ export class InsightsService {
       `Fetching insights for user ${userId} for month ${targetMonth}`,
     );
 
-    // Optimize performance: use index-supported LIKE query on dates instead of slow parsing in code
-    // Assuming createdAt format is ISO string e.g. "2026-04-12T14:32:00.000Z"
-    const monthlyTransactions = await this.db
+    const startOfMonth = `${targetMonth}-01T00:00:00.000Z`;
+    const endDate = new Date(startOfMonth);
+    endDate.setMonth(endDate.getMonth() + 1);
+    const endOfMonth = endDate.toISOString();
+
+    const whereClause = and(
+      eq(transactions.userId, userId),
+      gte(transactions.createdAt, startOfMonth),
+      lt(transactions.createdAt, endOfMonth),
+    );
+
+    const [totalsResult] = await this.db
       .select({
-        amount: transactions.amount,
-        category: transactions.category,
-        createdAt: transactions.createdAt,
+        total: sql<number>`sum(abs(${transactions.amount}))`,
+        count: sql<number>`count(*)`,
       })
       .from(transactions)
-      .where(
-        and(
-          eq(transactions.userId, userId),
-          like(transactions.createdAt, `${targetMonth}%`),
-        ),
-      );
+      .where(whereClause);
 
-    const total = monthlyTransactions.reduce(
-      (sum, tx) => sum + Math.abs(tx.amount),
-      0,
-    );
+    const categoryBreakdown = await this.db
+      .select({
+        category: transactions.category,
+        total: sql<number>`sum(abs(${transactions.amount}))`,
+        count: sql<number>`count(*)`,
+      })
+      .from(transactions)
+      .where(whereClause)
+      .groupBy(transactions.category)
+      .orderBy(sql`sum(abs(${transactions.amount})) DESC`);
 
-    const categoryBreakdown = monthlyTransactions.reduce(
-      (acc, tx) => {
-        const cat = tx.category;
-        if (!acc[cat]) {
-          acc[cat] = { category: cat, total: 0, count: 0 };
-        }
-        acc[cat].total += Math.abs(tx.amount);
-        acc[cat].count += 1;
-        return acc;
-      },
-      {} as Record<string, CategoryBreakdown>,
-    );
-
-    const dailyExpenses = monthlyTransactions.reduce(
-      (acc, tx) => {
-        const date = tx.createdAt.split('T')[0];
-        if (!acc[date]) {
-          acc[date] = { date, total: 0 };
-        }
-        acc[date].total += Math.abs(tx.amount);
-        return acc;
-      },
-      {} as Record<string, DailyExpense>,
-    );
+    const dailyExpenses = await this.db
+      .select({
+        date: sql<string>`date(${transactions.createdAt})`,
+        total: sql<number>`sum(abs(${transactions.amount}))`,
+      })
+      .from(transactions)
+      .where(whereClause)
+      .groupBy(sql`date(${transactions.createdAt})`)
+      .orderBy(sql`date(${transactions.createdAt}) ASC`);
 
     return {
       month: targetMonth,
-      total,
-      transactionCount: monthlyTransactions.length,
-      categoryBreakdown: Object.values(categoryBreakdown).sort(
-        (a, b) => b.total - a.total,
-      ),
-      dailyExpenses: Object.values(dailyExpenses).sort(
-        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-      ),
+      total: totalsResult?.total ?? 0,
+      transactionCount: totalsResult?.count ?? 0,
+      categoryBreakdown,
+      dailyExpenses,
     };
   }
 }

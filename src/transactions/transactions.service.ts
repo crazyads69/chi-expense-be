@@ -8,7 +8,7 @@ import {
 import { DRIZZLE } from '../db/db-token';
 import type { DrizzleDatabase } from '../db/db-token';
 import { transactions } from '../db/schema';
-import { eq, and, like, desc } from 'drizzle-orm';
+import { eq, and, desc, gte, lt, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
@@ -21,26 +21,56 @@ export class TransactionsService {
     @Inject(DRIZZLE)
     private readonly db: DrizzleDatabase,
   ) {}
-  async listByMonth(userId: string, month?: string) {
+  async listByMonth(
+    userId: string,
+    month?: string,
+    page: number = 1,
+    limit: number = 50,
+  ) {
     if (month && !/^\d{4}-\d{2}$/.test(month)) {
       throw new BadRequestException('Invalid month format. Expected YYYY-MM');
     }
+
+    const validatedPage = Math.max(1, page);
+    const validatedLimit = Math.min(100, Math.max(1, limit));
+    const offset = (validatedPage - 1) * validatedLimit;
 
     const now = new Date();
     const targetMonth =
       month ||
       `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-    return this.db
+    const startOfMonth = `${targetMonth}-01T00:00:00.000Z`;
+    const endDate = new Date(startOfMonth);
+    endDate.setMonth(endDate.getMonth() + 1);
+    const endOfMonth = endDate.toISOString();
+
+    const whereClause = and(
+      eq(transactions.userId, userId),
+      gte(transactions.createdAt, startOfMonth),
+      lt(transactions.createdAt, endOfMonth),
+    );
+
+    const [countResult] = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(transactions)
+      .where(whereClause);
+
+    const data = await this.db
       .select()
       .from(transactions)
-      .where(
-        and(
-          eq(transactions.userId, userId),
-          like(transactions.createdAt, `${targetMonth}%`),
-        ),
-      )
-      .orderBy(desc(transactions.createdAt)); // Performance & UX: Usually users want newest first
+      .where(whereClause)
+      .orderBy(desc(transactions.createdAt))
+      .limit(validatedLimit)
+      .offset(offset);
+
+    const total = countResult?.count ?? 0;
+
+    return {
+      data,
+      total,
+      hasMore: total > validatedPage * validatedLimit,
+    };
   }
 
   async create(userId: string, dto: CreateTransactionDto) {
