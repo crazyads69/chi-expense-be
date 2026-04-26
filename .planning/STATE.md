@@ -4,7 +4,7 @@ milestone_name: "Code Hardening & Production Readiness"
 status: planning
 progress:
   phases: 7
-  plans: 0
+  plans: 4
   completed: 0
 ---
 
@@ -13,14 +13,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-26)
 
 **Core value:** Log an expense in 2 seconds with zero UI friction
-**Current focus:** Phase 1 — Database Foundation
+**Current focus:** Phase 3 — Test Infrastructure & Error Resilience
 
 ## Current Position
 
-Phase: 1 (Context gathered)
-Plan: —
-Status: Ready for planning — 13 decisions captured in CONTEXT.md
-Last activity: 2026-04-26 — Phase 1 context gathered
+Phase: 3 (Planned)
+Plan: 03-01, 03-02, 03-03, 03-04
+Status: Ready to execute — 4 plans covering TST-01 through TST-05
+Last activity: 2026-04-26 — Phase 3 planned (DI infrastructure, test env, LLM error resilience, service migration)
 
 ## Accumulated Context
 

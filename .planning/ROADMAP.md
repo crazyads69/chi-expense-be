@@ -47,6 +47,18 @@
 
 **Requirements:** TST-01, TST-02, TST-03, TST-04, TST-05
 
+**Plans:** 4 plans
+
+**Plan list:**
+- [ ] `03-01-PLAN.md` — Database DI Infrastructure & Config Validation (Wave 1)
+- [ ] `03-02-PLAN.md` — Test Environment Setup with In-Memory SQLite (Wave 1)
+- [ ] `03-03-PLAN.md` — LLM Error Resilience & OpenRouter Config (Wave 1)
+- [ ] `03-04-PLAN.md` — Migrate Services to Dependency Injection (Wave 2)
+
+**Wave dependencies:**
+- Wave 1 (plans 01, 02, 03) can execute in parallel — no file overlap
+- Wave 2 (plan 04) depends on Wave 1 completion for `DatabaseModule` and `DRIZZLE` token
+
 **Success criteria:**
 1. `DatabaseModule` registered as `@Global()` with `DRIZZLE` injection token — all 5 services use `@Inject(DRIZZLE)` instead of importing `db` singleton
 2. `jest` configured with in-memory SQLite (`:memory:`) via `test/helpers/setup.ts` — `npm run test` boots without real DB
@@ -127,16 +139,16 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DB-01 | Phase 1 | Pending |
-| DB-02 | Phase 1 | Pending |
-| DB-03 | Phase 1 | Pending |
-| DB-04 | Phase 1 | Pending |
-| DB-05 | Phase 1 | Pending |
-| SEC-01 | Phase 2 | Pending |
-| SEC-02 | Phase 2 | Pending |
-| SEC-03 | Phase 2 | Pending |
-| SEC-04 | Phase 2 | Pending |
-| SEC-05 | Phase 2 | Pending |
+| DB-01 | Phase 1 | Complete |
+| DB-02 | Phase 1 | Deferred |
+| DB-03 | Phase 1 | Complete |
+| DB-04 | Phase 1 | Complete |
+| DB-05 | Phase 1 | Complete |
+| SEC-01 | Phase 2 | Complete |
+| SEC-02 | Phase 2 | Complete |
+| SEC-03 | Phase 2 | Complete |
+| SEC-04 | Phase 2 | Complete |
+| SEC-05 | Phase 2 | Complete |
 | TST-01 | Phase 3 | Pending |
 | TST-02 | Phase 3 | Pending |
 | TST-03 | Phase 3 | Pending |
