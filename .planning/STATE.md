@@ -17,10 +17,10 @@ See: .planning/PROJECT.md (updated 2026-04-26)
 
 ## Current Position
 
-Phase: 1 (Not started)
+Phase: 1 (Context gathered)
 Plan: —
-Status: Planning complete — ready to execute Phase 1
-Last activity: 2026-04-26 — Milestone v1.0 roadmap created (7 phases, 25 requirements)
+Status: Ready for planning — 13 decisions captured in CONTEXT.md
+Last activity: 2026-04-26 — Phase 1 context gathered
 
 ## Accumulated Context
 
@@ -29,6 +29,9 @@ Last activity: 2026-04-26 — Milestone v1.0 roadmap created (7 phases, 25 requi
 - Database foundation (Phase 1) must ship first — migrations are the foundation
 - Timestamp TEXT→INTEGER migration for existing data deferred to v1.1 (high risk, low reward)
 - `better-sqlite3` selected for in-memory testing over libsql in-memory (better Drizzle compatibility)
+- Migration approach: `drizzle-kit generate` from current schema, auto-migrate on cold start
+- HTTP-based Turso client for Vercel serverless compatibility
+- `onConflictDoNothing()` replaces error string matching in categories service
 
 ### Blockers
 - None
