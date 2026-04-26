@@ -51,12 +51,16 @@ export class InputService {
     for (const pattern of patterns) {
       const match = message.match(pattern);
       if (match) {
-        let amount = match[1].replace(/[.,]/g, '');
         const hasThousands = /k|nghìn|ng/i.test(match[0]);
+        let amount: number;
         if (hasThousands) {
-          amount = (parseFloat(amount) * AMOUNT_MULTIPLIER).toString();
+          // Parse as float (preserving decimal point), then multiply by 1000
+          amount = parseFloat(match[1].replace(/,/g, '')) * AMOUNT_MULTIPLIER;
+        } else {
+          // Strip all separators and parse as integer
+          amount = parseInt(match[1].replace(/[.,]/g, ''), 10);
         }
-        return parseInt(amount, 10);
+        return Math.floor(amount);
       }
     }
     return 0;
