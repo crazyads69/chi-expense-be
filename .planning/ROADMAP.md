@@ -79,11 +79,11 @@
 **Plans:** 5 plans
 
 **Plan list:**
-- [ ] `04-01-PLAN.md` — Core Database Service Unit Tests (Wave 1)
-- [ ] `04-02-PLAN.md` — Input, Insights & RateLimitGuard Unit Tests (Wave 1)
-- [ ] `04-03-PLAN.md` — Utility Functions Unit Tests (Wave 1)
-- [ ] `04-04-PLAN.md` — E2E Test Suite (Wave 2)
-- [ ] `04-05-PLAN.md` — CI Pipeline Configuration (Wave 2)
+- [x] `04-01-PLAN.md` — Core Database Service Unit Tests (Wave 1)
+- [x] `04-02-PLAN.md` — Input, Insights & RateLimitGuard Unit Tests (Wave 1)
+- [x] `04-03-PLAN.md` — Utility Functions Unit Tests (Wave 1)
+- [x] `04-04-PLAN.md` — E2E Test Suite (Wave 2)
+- [x] `04-05-PLAN.md` — CI Pipeline Configuration (Wave 2)
 
 **Wave dependencies:**
 - Wave 1 (plans 01, 02, 03) can execute in parallel — no file overlap

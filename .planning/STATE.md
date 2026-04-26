@@ -1,11 +1,11 @@
 ---
 milestone: v1.0
 milestone_name: "Code Hardening & Production Readiness"
-status: planning
+status: executing
 progress:
   phases: 7
-  plans: 4
-  completed: 0
+  plans: 9
+  completed: 4
 ---
 
 ## Project Reference
@@ -13,14 +13,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-26)
 
 **Core value:** Log an expense in 2 seconds with zero UI friction
-**Current focus:** Phase 3 — Test Infrastructure & Error Resilience
+**Current focus:** Phase 4 — Automated Quality Gates
 
 ## Current Position
 
-Phase: 3 (Executed)
-Plan: 03-01, 03-02, 03-03, 03-04
-Status: Complete — 5 test requirements implemented
-Last activity: 2026-04-26 — Phase 3 executed (DI infrastructure, test env, LLM error resilience, service migration)
+Phase: 4 (Executed)
+Plan: 04-01, 04-02, 04-03, 04-04, 04-05
+Status: Complete — 4 quality requirements implemented
+Last activity: 2026-04-26 — Phase 4 executed (unit tests for all services, E2E tests, CI pipeline)
 
 ## Accumulated Context
 
@@ -32,6 +32,8 @@ Last activity: 2026-04-26 — Phase 3 executed (DI infrastructure, test env, LLM
 - Migration approach: `drizzle-kit generate` from current schema, auto-migrate on cold start
 - HTTP-based Turso client for Vercel serverless compatibility
 - `onConflictDoNothing()` replaces error string matching in categories service
+- ESM modules (`nanoid`, `better-auth`) require `transformIgnorePatterns` in Jest config
+- better-sqlite3 sync transactions require mocking for async service code compatibility
 
 ### Blockers
 - None
