@@ -14,7 +14,10 @@ Quy tắc:
 
 export function USER_PROMPT_TEMPLATE(message: string): string {
   return `Phân tích tin nhắn sau và trả về JSON chi tiêu:
-"${message}"
+
+<<<USER_MESSAGE>>>
+${message}
+<<<END_USER_MESSAGE>>>
 
 Ví dụ:
 - "cà phê 35k" → {"amount": 35000, "merchant": "Cà phê", "category": "Ăn uống"}

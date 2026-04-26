@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { db } from '../db/client';
+import { Injectable, Logger, Inject } from '@nestjs/common';
+import { DRIZZLE } from '../db/db-token';
+import type { DrizzleDatabase } from '../db/db-token';
 import { transactions, categories, user, session, account } from '../db/schema';
 import { eq } from 'drizzle-orm';
 
@@ -7,9 +8,14 @@ import { eq } from 'drizzle-orm';
 export class AccountService {
   private readonly logger = new Logger(AccountService.name);
 
+  constructor(
+    @Inject(DRIZZLE)
+    private readonly db: DrizzleDatabase,
+  ) {}
+
   async deleteAccount(userId: string) {
     this.logger.log(`Starting account deletion for user: ${userId}`);
-    await db.transaction(async (tx) => {
+    await this.db.transaction(async (tx) => {
       // First delete related data to ensure no orphaned records (even with cascade)
       await tx.delete(transactions).where(eq(transactions.userId, userId));
       await tx.delete(categories).where(eq(categories.userId, userId));
@@ -30,12 +36,12 @@ export class AccountService {
 
   async exportData(userId: string) {
     this.logger.log(`Exporting data for user: ${userId}`);
-    const userTransactions = await db
+    const userTransactions = await this.db
       .select()
       .from(transactions)
       .where(eq(transactions.userId, userId));
 
-    const userCategories = await db
+    const userCategories = await this.db
       .select()
       .from(categories)
       .where(eq(categories.userId, userId));

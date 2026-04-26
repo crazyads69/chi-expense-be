@@ -3,8 +3,10 @@ import {
   NotFoundException,
   BadRequestException,
   Logger,
+  Inject,
 } from '@nestjs/common';
-import { db } from '../db/client';
+import { DRIZZLE } from '../db/db-token';
+import type { DrizzleDatabase } from '../db/db-token';
 import { transactions } from '../db/schema';
 import { eq, and, like, desc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
@@ -14,6 +16,11 @@ import { UpdateTransactionDto } from './dto/update-transaction.dto';
 @Injectable()
 export class TransactionsService {
   private readonly logger = new Logger(TransactionsService.name);
+
+  constructor(
+    @Inject(DRIZZLE)
+    private readonly db: DrizzleDatabase,
+  ) {}
   async listByMonth(userId: string, month?: string) {
     if (month && !/^\d{4}-\d{2}$/.test(month)) {
       throw new BadRequestException('Invalid month format. Expected YYYY-MM');
@@ -24,7 +31,7 @@ export class TransactionsService {
       month ||
       `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-    return db
+    return this.db
       .select()
       .from(transactions)
       .where(
@@ -45,7 +52,7 @@ export class TransactionsService {
     // Assuming positive = expense by default. We negate it here for the database.
     const amountToStore = -Math.abs(dto.amount);
 
-    const [result] = await db
+    const [result] = await this.db
       .insert(transactions)
       .values({
         id,
@@ -74,7 +81,7 @@ export class TransactionsService {
       updateData.amount = -Math.abs(dto.amount);
     }
 
-    const [result] = await db
+    const [result] = await this.db
       .update(transactions)
       .set(updateData)
       .where(and(eq(transactions.userId, userId), eq(transactions.id, id)))
@@ -92,7 +99,7 @@ export class TransactionsService {
   }
 
   async delete(userId: string, id: string) {
-    const [result] = await db
+    const [result] = await this.db
       .delete(transactions)
       .where(and(eq(transactions.userId, userId), eq(transactions.id, id)))
       .returning();

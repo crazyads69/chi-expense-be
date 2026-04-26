@@ -105,12 +105,13 @@ export const transactions = sqliteTable(
     category: text('category').notNull(),
     source: text('source').notNull(),
     note: text('note'),
-    createdAt: text('created_at').notNull(),
+    createdAt: text('created_at').notNull(), // NOTE: Stored as TEXT (ISO 8601 string), not integer timestamp_ms. See Phase 1 D-04 — migration to integer deferred to v1.1 (high risk, low reward for v1.0).
     updatedAt: text('updated_at').notNull(),
   },
   (table) => [
     // Performance optimization: Compound index for listing transactions by user and month
     index('idx_transactions_user_createdAt').on(table.userId, table.createdAt),
+    index('idx_transactions_category').on(table.category),
   ],
 );
 
@@ -124,7 +125,7 @@ export const categories = sqliteTable(
     name: text('name').notNull(),
     slug: text('slug').notNull(),
     budget: integer('budget'),
-    createdAt: text('created_at').notNull(),
+    createdAt: text('created_at').notNull(), // NOTE: Stored as TEXT (ISO 8601 string), not integer timestamp_ms. See Phase 1 D-04 — migration to integer deferred to v1.1 (high risk, low reward for v1.0).
   },
   (table) => [
     index('idx_categories_userId').on(table.userId),

@@ -1,4 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
+import OpenAI from 'openai';
 import { getOpenAIClient } from '../lib/openrouter';
 import { MERCHANT_CATEGORY_MAP } from '../lib/merchant-table';
 import { SYSTEM_PROMPT, USER_PROMPT_TEMPLATE } from '../lib/prompts';
@@ -69,6 +75,18 @@ export class InputService {
     return cleaned.slice(0, MAX_MERCHANT_LENGTH) || 'Unknown';
   }
 
+  private sanitizeUserMessage(message: string): string {
+    // Strip characters that could be used for prompt injection:
+    // - JSON/control characters: { } [ ] < > \x00-\x1F
+    // - Backticks: ` (used to escape markdown/code blocks)
+    // - Triple quotes: """ (Python-style string delimiters)
+    // Note: We preserve Vietnamese diacritics and normal punctuation.
+    return message
+      .replace(/[{}[\]<>\x00-\x1F`]/g, '')
+      .replace(/"""/g, '"')
+      .trim();
+  }
+
   async parseText(userId: string, message: string): Promise<ParsedExpense> {
     const categoryFromMap = this.lookupMerchant(message);
     if (categoryFromMap) {
@@ -85,7 +103,10 @@ export class InputService {
         model: 'qwen/qwen3-8b',
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: USER_PROMPT_TEMPLATE(message) },
+          {
+            role: 'user',
+            content: USER_PROMPT_TEMPLATE(this.sanitizeUserMessage(message)),
+          },
         ],
         temperature: LLM_TEMPERATURE,
         max_tokens: LLM_TEXT_MAX_TOKENS,
@@ -94,35 +115,65 @@ export class InputService {
       const content = response.choices[0]?.message?.content || '';
       const jsonMatch = content.match(/\{[\s\S]*?\}/);
 
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]) as {
-          amount: number;
-          merchant?: string;
-          category?: string;
-          note?: string;
-        };
-        return {
-          amount:
-            typeof parsed.amount === 'number'
-              ? Math.abs(parsed.amount)
-              : Math.abs(this.parseAmount(message)),
-          merchant: parsed.merchant || this.extractMerchant(message),
-          category: parsed.category || 'Khác',
-          note: parsed.note,
-        };
+      if (!jsonMatch) {
+        throw new HttpException(
+          'AI response did not contain valid expense data',
+          HttpStatus.BAD_GATEWAY,
+        );
       }
+
+      const parsed = JSON.parse(jsonMatch[0]) as {
+        amount: number;
+        merchant?: string;
+        category?: string;
+        note?: string;
+      };
+      return {
+        amount:
+          typeof parsed.amount === 'number'
+            ? Math.abs(parsed.amount)
+            : Math.abs(this.parseAmount(message)),
+        merchant: parsed.merchant || this.extractMerchant(message),
+        category: parsed.category || 'Khác',
+        note: parsed.note,
+      };
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      if (
+        error instanceof SyntaxError ||
+        (error instanceof Error && error.message.includes('JSON'))
+      ) {
+        throw new HttpException(
+          'AI response could not be parsed',
+          HttpStatus.BAD_GATEWAY,
+        );
+      }
+
+      if (
+        error instanceof OpenAI.APIError ||
+        (error instanceof Error &&
+          (error.message.toLowerCase().includes('timeout') ||
+            error.message.toLowerCase().includes('network') ||
+            error.message.toLowerCase().includes('connection')))
+      ) {
+        throw new HttpException(
+          'AI parsing is taking too long. Please try again.',
+          HttpStatus.SERVICE_UNAVAILABLE,
+        );
+      }
+
       this.logger.error(
         'LLM parsing failed',
         error instanceof Error ? error.stack : error,
       );
+      throw new HttpException(
+        'AI service temporarily unavailable. Please try again later.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
     }
-
-    return {
-      amount: Math.abs(this.parseAmount(message)),
-      merchant: this.extractMerchant(message),
-      category: 'Khác',
-    };
   }
 
   async parseImage(
@@ -145,9 +196,7 @@ export class InputService {
               {
                 type: 'image_url',
                 image_url: {
-                  url: imageBase64.startsWith('data:')
-                    ? imageBase64
-                    : `data:image/jpeg;base64,${imageBase64}`,
+                  url: imageBase64,
                 },
               },
             ],
@@ -160,32 +209,62 @@ export class InputService {
       const content = response.choices[0]?.message?.content || '';
       const jsonMatch = content.match(/\{[\s\S]*?\}/);
 
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]) as {
-          amount?: number;
-          merchant?: string;
-          category?: string;
-          note?: string;
-        };
-        return {
-          amount:
-            typeof parsed.amount === 'number' ? Math.abs(parsed.amount) : 0,
-          merchant: parsed.merchant || 'Unknown',
-          category: parsed.category || 'Khác',
-          note: parsed.note,
-        };
+      if (!jsonMatch) {
+        throw new HttpException(
+          'AI response did not contain valid expense data from image',
+          HttpStatus.BAD_GATEWAY,
+        );
       }
+
+      const parsed = JSON.parse(jsonMatch[0]) as {
+        amount?: number;
+        merchant?: string;
+        category?: string;
+        note?: string;
+      };
+      return {
+        amount:
+          typeof parsed.amount === 'number' ? Math.abs(parsed.amount) : 0,
+        merchant: parsed.merchant || 'Unknown',
+        category: parsed.category || 'Khác',
+        note: parsed.note,
+      };
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      if (
+        error instanceof SyntaxError ||
+        (error instanceof Error && error.message.includes('JSON'))
+      ) {
+        throw new HttpException(
+          'AI response could not be parsed',
+          HttpStatus.BAD_GATEWAY,
+        );
+      }
+
+      if (
+        error instanceof OpenAI.APIError ||
+        (error instanceof Error &&
+          (error.message.toLowerCase().includes('timeout') ||
+            error.message.toLowerCase().includes('network') ||
+            error.message.toLowerCase().includes('connection')))
+      ) {
+        throw new HttpException(
+          'AI image parsing is taking too long. Please try again.',
+          HttpStatus.SERVICE_UNAVAILABLE,
+        );
+      }
+
       this.logger.error(
         'LLM image parsing failed',
         error instanceof Error ? error.stack : error,
       );
+      throw new HttpException(
+        'AI service temporarily unavailable. Please try again later.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
     }
-
-    return {
-      amount: 0,
-      merchant: 'Unknown',
-      category: 'Khác',
-    };
   }
 }

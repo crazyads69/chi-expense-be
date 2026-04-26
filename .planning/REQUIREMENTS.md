@@ -18,19 +18,19 @@ Requirements for code hardening milestone. Each maps to a roadmap phase.
 
 ### Security
 
-- [ ] **SEC-01**: CORS restricts origins to configured allowlist (`FRONTEND_URL`, mobile custom schemes) instead of `origin: true`
-- [ ] **SEC-02**: Rate limiter prefers authenticated user ID over spoofable `x-forwarded-for` header; returns 401 for unauthenticated LLM requests
-- [ ] **SEC-03**: LLM prompt injection mitigated via input sanitization (strip JSON-like syntax, delimiter-wrapped user messages)
-- [ ] **SEC-04**: OAuth client secrets validated at startup — throw descriptive error if missing, not empty string fallback
-- [ ] **SEC-05**: Image input endpoint validates base64 prefix (`data:image/jpeg;base64,` or `data:image/png;base64,`) before processing
+- [x] **SEC-01**: CORS restricts origins to configured allowlist (`FRONTEND_URL`, mobile custom schemes) instead of `origin: true`
+- [x] **SEC-02**: Rate limiter prefers authenticated user ID over spoofable `x-forwarded-for` header; returns 401 for unauthenticated LLM requests
+- [x] **SEC-03**: LLM prompt injection mitigated via input sanitization (strip JSON-like syntax, delimiter-wrapped user messages)
+- [x] **SEC-04**: OAuth client secrets validated at startup — throw descriptive error if missing, not empty string fallback
+- [x] **SEC-05**: Image input endpoint validates base64 prefix (`data:image/jpeg;base64,` or `data:image/png;base64,`) before processing
 
 ### Testing & Error Resilience
 
-- [ ] **TST-01**: Database client is injectable via NestJS custom provider token (`DRIZZLE`), enabling test database swapping
-- [ ] **TST-02**: In-memory SQLite database configured for test environment via Jest setup
-- [ ] **TST-03**: LLM parsing failures propagate as HTTP 502/503 errors instead of silently returning `{ amount: 0, merchant: 'Unknown' }`
-- [ ] **TST-04**: OpenRouter API client configured with 8s timeout and 1 retry for transient failures
-- [ ] **TST-05**: All required environment variables validated at startup via `ConfigModule.forRoot({ validate })` with descriptive errors
+- [x] **TST-01**: Database client is injectable via NestJS custom provider token (`DRIZZLE`), enabling test database swapping
+- [x] **TST-02**: In-memory SQLite database configured for test environment via Jest setup
+- [x] **TST-03**: LLM parsing failures propagate as HTTP 502/503 errors instead of silently returning `{ amount: 0, merchant: 'Unknown' }`
+- [x] **TST-04**: OpenRouter API client configured with 8s timeout and 1 retry for transient failures
+- [x] **TST-05**: All required environment variables validated at startup via `ConfigModule.forRoot({ validate })` with descriptive errors
 
 ### Automated Quality Gates
 

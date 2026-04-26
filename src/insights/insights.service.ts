@@ -1,5 +1,6 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
-import { db } from '../db/client';
+import { Injectable, BadRequestException, Logger, Inject } from '@nestjs/common';
+import { DRIZZLE } from '../db/db-token';
+import type { DrizzleDatabase } from '../db/db-token';
 import { transactions } from '../db/schema';
 import { eq, and, like } from 'drizzle-orm';
 
@@ -18,6 +19,11 @@ export interface DailyExpense {
 export class InsightsService {
   private readonly logger = new Logger(InsightsService.name);
 
+  constructor(
+    @Inject(DRIZZLE)
+    private readonly db: DrizzleDatabase,
+  ) {}
+
   async getMonthlyInsights(userId: string, month?: string) {
     if (month && !/^\d{4}-\d{2}$/.test(month)) {
       throw new BadRequestException('Invalid month format. Expected YYYY-MM');
@@ -34,7 +40,7 @@ export class InsightsService {
 
     // Optimize performance: use index-supported LIKE query on dates instead of slow parsing in code
     // Assuming createdAt format is ISO string e.g. "2026-04-12T14:32:00.000Z"
-    const monthlyTransactions = await db
+    const monthlyTransactions = await this.db
       .select({
         amount: transactions.amount,
         category: transactions.category,
