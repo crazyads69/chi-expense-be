@@ -16,6 +16,7 @@ import { InsightsModule } from './insights/insights.module';
 import { CategoriesModule } from './categories/categories.module';
 import { InputModule } from './input/input.module';
 import { AccountModule } from './account/account.module';
+import { PushModule } from './push/push.module';
 import { HealthController } from './health.controller';
 import { ShutdownService } from './lib/shutdown.service';
 
@@ -131,6 +132,7 @@ function validate(config: Record<string, unknown>) {
     CategoriesModule,
     InputModule,
     AccountModule,
+    PushModule,
   ],
   controllers: [HealthController],
   providers: [
