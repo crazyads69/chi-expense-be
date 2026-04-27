@@ -133,7 +133,53 @@ export const categories = sqliteTable(
   ],
 );
 
+export const pushTokens = sqliteTable(
+  'push_tokens',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    token: text('token').notNull().unique(),
+    platform: text('platform', { enum: ['ios', 'android'] }).notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index('push_tokens_userId_idx').on(table.userId),
+    uniqueIndex('push_tokens_token_idx').on(table.token),
+  ],
+);
+
+export const notificationPreferences = sqliteTable(
+  'notification_preferences',
+  {
+    userId: text('user_id')
+      .primaryKey()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    dailySummaryEnabled: integer('daily_summary_enabled', { mode: 'boolean' })
+      .default(true)
+      .notNull(),
+    dailySummaryTime: text('daily_summary_time').default('21:00').notNull(),
+    budgetAlertsEnabled: integer('budget_alerts_enabled', { mode: 'boolean' })
+      .default(true)
+      .notNull(),
+    budgetThreshold: integer('budget_threshold').default(80).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+);
+
 export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
 export type Category = typeof categories.$inferSelect;
 export type NewCategory = typeof categories.$inferInsert;
+export type PushToken = typeof pushTokens.$inferSelect;
+export type NewPushToken = typeof pushTokens.$inferInsert;
+export type NotificationPreference = typeof notificationPreferences.$inferSelect;
+export type NewNotificationPreference = typeof notificationPreferences.$inferInsert;
