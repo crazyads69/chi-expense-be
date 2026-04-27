@@ -27,7 +27,7 @@ async function bootstrap(): Promise<Express> {
     console.log('[migration] Database migrations up to date.');
   } catch (error) {
     console.error('[migration] Migration failed:', error);
-    Sentry.captureException(error);
+    Sentry.captureException(error, { tags: { context: 'migration' } });
     process.exit(1);
   }
 
@@ -66,7 +66,10 @@ async function bootstrap(): Promise<Express> {
   ];
 
   app.enableCors({
-    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => {
       // Allow requests with no origin (mobile apps, same-origin, curl)
       // AND allow explicitly configured origins
       if (!origin || allowedOrigins.includes(origin)) {
@@ -83,7 +86,9 @@ async function bootstrap(): Promise<Express> {
   // Swagger/OpenAPI documentation
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Chi Expense API')
-    .setDescription('Zero-friction expense tracking API for Chi Expense mobile app')
+    .setDescription(
+      'Zero-friction expense tracking API for Chi Expense mobile app',
+    )
     .setVersion('1.0.0')
     .addBearerAuth(
       {

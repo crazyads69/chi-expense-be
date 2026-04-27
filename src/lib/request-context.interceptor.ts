@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import {
   Injectable,
   NestInterceptor,
@@ -14,7 +15,7 @@ export class RequestContextInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest();
 
     // Use incoming x-request-id or generate new one
-    const requestId = request.headers['x-request-id'] || crypto.randomUUID();
+    const requestId = request.headers['x-request-id'] || randomUUID();
     const startTime = Date.now();
 
     // Set response header
