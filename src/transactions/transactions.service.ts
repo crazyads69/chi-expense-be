@@ -7,12 +7,13 @@ import {
 } from '@nestjs/common';
 import { DRIZZLE } from '../db/db-token';
 import type { DrizzleDatabase } from '../db/db-token';
-import { transactions } from '../db/schema';
+import { transactions, categories, notificationPreferences } from '../db/schema';
 import { eq, and, desc, gte, lt, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { parseMonth, getMonthBoundaries, nowISO } from '../lib/date-utils';
+import { PushService } from '../push/push.service';
 
 @Injectable()
 export class TransactionsService {
@@ -21,6 +22,7 @@ export class TransactionsService {
   constructor(
     @Inject(DRIZZLE)
     private readonly db: DrizzleDatabase,
+    private readonly pushService: PushService,
   ) {}
   async listByMonth(
     userId: string,
@@ -96,7 +98,66 @@ export class TransactionsService {
       .returning();
 
     this.logger.log(`Created transaction ${result.id} for user ${userId}`);
+
+    // Trigger budget alert check asynchronously — non-blocking
+    this.checkBudgetAlert(userId, dto.category).catch((err) => {
+      this.logger.error(`Budget alert check failed: ${err.message}`, err.stack);
+    });
+
     return result;
+  }
+
+  private async checkBudgetAlert(
+    userId: string,
+    categoryName: string,
+  ): Promise<void> {
+    // Find category with budget
+    const [category] = await this.db
+      .select()
+      .from(categories)
+      .where(and(eq(categories.userId, userId), eq(categories.name, categoryName)))
+      .limit(1);
+
+    if (!category || !category.budget || category.budget <= 0) {
+      return;
+    }
+
+    // Get user's notification preferences
+    const [prefs] = await this.db
+      .select()
+      .from(notificationPreferences)
+      .where(eq(notificationPreferences.userId, userId));
+
+    if (!prefs || !prefs.budgetAlertsEnabled) {
+      return;
+    }
+
+    const thresholdAmount = (category.budget * prefs.budgetThreshold) / 100;
+
+    // Sum transactions for current month in this category
+    const { start, end } = getMonthBoundaries(parseMonth());
+    const [spentResult] = await this.db
+      .select({ total: sql<number>`abs(sum(${transactions.amount}))` })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.userId, userId),
+          eq(transactions.category, categoryName),
+          gte(transactions.createdAt, start.toISOString()),
+          lt(transactions.createdAt, end.toISOString()),
+        ),
+      );
+
+    const spent = spentResult?.total ?? 0;
+
+    if (spent >= thresholdAmount) {
+      await this.pushService.sendBudgetAlert(
+        userId,
+        categoryName,
+        spent,
+        category.budget,
+      );
+    }
   }
 
   async update(userId: string, id: string, dto: UpdateTransactionDto) {
