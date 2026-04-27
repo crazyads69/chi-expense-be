@@ -3,6 +3,7 @@ import { DRIZZLE } from '../db/db-token';
 import type { DrizzleDatabase } from '../db/db-token';
 import { transactions } from '../db/schema';
 import { eq, and, gte, lt, sql } from 'drizzle-orm';
+import { parseMonth, getMonthBoundaries } from '../lib/date-utils';
 
 export interface CategoryBreakdown {
   category: string;
@@ -25,23 +26,20 @@ export class InsightsService {
   ) {}
 
   async getMonthlyInsights(userId: string, month?: string) {
-    if (month && !/^\d{4}-\d{2}$/.test(month)) {
+    let targetMonth: string;
+    try {
+      targetMonth = parseMonth(month);
+    } catch {
       throw new BadRequestException('Invalid month format. Expected YYYY-MM');
     }
-
-    const now = new Date();
-    const targetMonth =
-      month ||
-      `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
     this.logger.log(
       `Fetching insights for user ${userId} for month ${targetMonth}`,
     );
 
-    const startOfMonth = `${targetMonth}-01T00:00:00.000Z`;
-    const endDate = new Date(startOfMonth);
-    endDate.setMonth(endDate.getMonth() + 1);
-    const endOfMonth = endDate.toISOString();
+    const { start, end } = getMonthBoundaries(targetMonth);
+    const startOfMonth = start.toISOString();
+    const endOfMonth = end.toISOString();
 
     const whereClause = and(
       eq(transactions.userId, userId),

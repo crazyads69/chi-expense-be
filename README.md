@@ -13,16 +13,23 @@ Chi Expense is the backend service for a zero-friction expense tracking applicat
 
 This project is built to be **App Store compliant**, multi-tenant safe, and optimized for serverless deployment on Vercel.
 
+**Milestone Status:** v1.1 Production Maturity & Scalability — ✅ **Complete** (30/30 requirements)
+
+> v1.0 Code Hardening — ✅ Complete (25/25 requirements)
+
 ---
 
 ## ✨ Key Features
 
-- 🔐 **Auth & Identity:** GitHub and Apple OAuth via [Better Auth](https://better-auth.com/). Built-in App Store compliance with cascade account deletion.
+- 🔐 **Auth & Identity:** GitHub + Apple Sign-In OAuth via [Better Auth](https://better-auth.com/). Built-in App Store compliance with cascade account deletion.
 - 🤖 **AI Expense Parsing:** Submit raw Vietnamese text (e.g., _"cà phê 35k"_) or receipt images and automatically extract amounts, merchants, and categories using OpenRouter.
+- 🖼️ **Image Optimization:** Receipt images are resized server-side (max 800px, JPEG 85%) before LLM processing to reduce costs and latency.
 - ⚡ **Serverless Ready:** Fully configured to deploy as a Vercel Function using `@vercel/node`.
-- 🗄️ **Edge Database:** Lightning-fast edge SQLite via Turso and Drizzle ORM.
+- 🗄️ **Edge Database:** Lightning-fast edge SQLite via Turso and Drizzle ORM with migration history.
 - 🛡️ **Security & Rate Limiting:** Global validation pipes, strict CORS policies, and Upstash Redis rate-limiting on LLM endpoints to prevent abuse.
-- 📊 **Observability:** High-performance structured JSON logging with `nestjs-pino`.
+- 📊 **Observability:** Sentry error tracking + performance tracing (10% sample), structured JSON logging with `nestjs-pino`, request correlation IDs, and dependency-aware health checks.
+- 🚀 **API Versioning:** All endpoints available under `/api/v1/` with backward-compatible `/api/` routes.
+- 📖 **API Documentation:** Interactive Swagger UI at `/api/docs` with bearer auth and full endpoint documentation.
 
 ---
 
@@ -129,6 +136,12 @@ UPSTASH_REDIS_REST_URL="https://your-upstash-url.upstash.io"
 UPSTASH_REDIS_REST_TOKEN="your-upstash-token"
 ```
 
+**Observability (Sentry)**
+
+```env
+SENTRY_DSN="https://your-public-dsn@sentry.io/project-id"
+```
+
 ### 4. Database Migration
 
 Push the Drizzle schema to your Turso database to create the required tables:
@@ -147,29 +160,64 @@ npm run start:dev
 
 The API will be available at `http://localhost:3000`.
 
-You can test the health endpoint to verify the server is running:
+You can test the health endpoint to verify the server and its dependencies are running:
 
 ```bash
 curl http://localhost:3000/api/health
 ```
 
+Expected response:
+```json
+{
+  "status": "ok",
+  "database": "connected",
+  "redis": "connected",
+  "timestamp": "2026-04-27T10:00:00.000Z"
+}
+```
+
+Explore the interactive API documentation at `http://localhost:3000/api/docs`.
+
 ---
 
 ## 🌐 API Reference
 
-| Method   | Path                    | Description                                    | Auth Required |
-| -------- | ----------------------- | ---------------------------------------------- | ------------- |
-| `GET`    | `/api/health`           | Public health check                            | No            |
-| `POST`   | `/api/input/text`       | Parse raw text into an expense                 | Yes (Bearer)  |
-| `POST`   | `/api/input/image`      | Parse a base64 image into an expense           | Yes (Bearer)  |
-| `GET`    | `/api/transactions`     | List monthly transactions                      | Yes (Bearer)  |
-| `POST`   | `/api/transactions`     | Create a transaction manually                  | Yes (Bearer)  |
-| `PATCH`  | `/api/transactions/:id` | Update a transaction                           | Yes (Bearer)  |
-| `DELETE` | `/api/transactions/:id` | Delete a transaction                           | Yes (Bearer)  |
-| `GET`    | `/api/insights`         | Get monthly spending breakdown                 | Yes (Bearer)  |
-| `GET`    | `/api/categories`       | List user categories                           | Yes (Bearer)  |
-| `GET`    | `/api/account/export`   | Export user data (GDPR compliant)              | Yes (Bearer)  |
-| `DELETE` | `/api/account`          | Delete user and all data (App Store compliant) | Yes (Bearer)  |
+Interactive Swagger documentation is available at `/api/docs` when the server is running.
+
+### Endpoints
+
+| Method   | Path                       | Description                                    | Auth Required |
+| -------- | -------------------------- | ---------------------------------------------- | ------------- |
+| `GET`    | `/api/health`              | Public health check with dependency status     | No            |
+| `POST`   | `/api/input/text`          | Parse raw text into an expense                 | Yes (Bearer)  |
+| `POST`   | `/api/input/image`         | Parse a base64 image into an expense           | Yes (Bearer)  |
+| `GET`    | `/api/transactions`        | List monthly transactions (paginated)          | Yes (Bearer)  |
+| `POST`   | `/api/transactions`        | Create a transaction manually                  | Yes (Bearer)  |
+| `PATCH`  | `/api/transactions/:id`    | Update a transaction                           | Yes (Bearer)  |
+| `DELETE` | `/api/transactions/:id`    | Delete a transaction                           | Yes (Bearer)  |
+| `GET`    | `/api/insights`            | Get monthly spending breakdown                 | Yes (Bearer)  |
+| `GET`    | `/api/categories`          | List user categories (Redis cached)            | Yes (Bearer)  |
+| `GET`    | `/api/account/export`      | Export user data (GDPR compliant)              | Yes (Bearer)  |
+| `DELETE` | `/api/account`             | Delete user and all data (App Store compliant) | Yes (Bearer)  |
+
+> All endpoints are also available under `/api/v1/` (e.g., `/api/v1/health`). Unversioned `/api/` routes remain backward compatible.
+
+### Pagination
+
+Transaction listing supports cursor-based pagination:
+
+```
+GET /api/transactions?page=1&limit=50&month=2026-04
+```
+
+Response:
+```json
+{
+  "data": [...],
+  "total": 243,
+  "hasMore": true
+}
+```
 
 ---
 
@@ -187,6 +235,22 @@ This application is specifically architected to deploy seamlessly to Vercel Serv
 
 ---
 
+## ✅ Quality & Testing
+
+This project maintains comprehensive test coverage as part of the v1.1 milestone:
+
+- **Unit Tests:** 62 tests covering all services, utility functions, guards, and controllers
+- **E2E Tests:** 12 tests covering all API endpoints with happy-path scenarios
+- **CI Pipeline:** GitHub Actions runs `lint → test → migration check` on every PR
+
+Run the full verification suite:
+
+```bash
+npm run build && npm test && npm run test:e2e
+```
+
+---
+
 ## 🛠️ Scripts & Maintenance
 
 - `npm run build`: Compiles the NestJS application to the `dist` folder.
@@ -194,6 +258,7 @@ This application is specifically architected to deploy seamlessly to Vercel Serv
 - `npm run lint`: Runs ESLint across the codebase.
 - `npm run test`: Executes unit tests via Jest.
 - `npm run test:e2e`: Executes end-to-end tests.
+- `npm run db:migrate`: Runs Drizzle database migrations.
 
 ---
 

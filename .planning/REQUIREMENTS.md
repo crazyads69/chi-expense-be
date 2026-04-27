@@ -1,130 +1,135 @@
-# Requirements: Chi Expense
+# Requirements: Chi Expense v1.1
 
-**Defined:** 2026-04-26
-**Milestone:** v1.0 — Code Hardening & Production Readiness
+**Defined:** 2026-04-27
+**Milestone:** v1.1 — Production Maturity & Scalability
 **Core Value:** Log an expense in 2 seconds with zero UI friction
 
-## v1 Requirements
+## v1.1 Requirements
 
-Requirements for code hardening milestone. Each maps to a roadmap phase.
+Requirements for production maturity milestone. Each maps to a roadmap phase.
 
-### Database Foundation
+### App Store Compliance
 
-- [ ] **DB-01**: Baseline database migrations exist with version history (`drizzle/` directory populated, `drizzle-kit generate` run)
-- [ ] **DB-02**: Timestamp columns are consistent across all tables (transactions, categories use `integer` with `mode: 'timestamp_ms'`)
-- [ ] **DB-03**: Missing index `idx_transactions_category` added on transactions.category for category-based queries
-- [ ] **DB-04**: UNIQUE constraint handling in categories service uses `onConflictDoNothing()` instead of error string matching
-- [ ] **DB-05**: Turso HTTP-based client (`@libsql/client/http`) used for serverless connection compatibility
+- [x] **APL-01**: Apple Sign-In OAuth provider configured and working end-to-end (web + native iOS flow)
+- [x] **APL-02**: Apple client secret JWT auto-generated and rotates correctly (6-month expiry handled)
+- [x] **APL-03**: Account linking works — existing GitHub users can link Apple identity without data loss
 
-### Security
+### Performance & Scalability
 
-- [x] **SEC-01**: CORS restricts origins to configured allowlist (`FRONTEND_URL`, mobile custom schemes) instead of `origin: true`
-- [x] **SEC-02**: Rate limiter prefers authenticated user ID over spoofable `x-forwarded-for` header; returns 401 for unauthenticated LLM requests
-- [x] **SEC-03**: LLM prompt injection mitigated via input sanitization (strip JSON-like syntax, delimiter-wrapped user messages)
-- [x] **SEC-04**: OAuth client secrets validated at startup — throw descriptive error if missing, not empty string fallback
-- [x] **SEC-05**: Image input endpoint validates base64 prefix (`data:image/jpeg;base64,` or `data:image/png;base64,`) before processing
+- [x] **CCH-01**: Categories list (`GET /api/categories`) served from Redis cache with 60s TTL
+- [x] **CCH-02**: Cache hit/miss metrics logged with structured Pino logs (count and ratio)
+- [x] **CCH-03**: Cache invalidation on category mutation (write-through or delete-on-update)
+- [x] **IMG-01**: Receipt images resized server-side to max 800px width before LLM API call
+- [x] **IMG-02**: Resized images converted to JPEG with 85% quality, target size < 1MB
+- [x] **IMG-03**: Image resize errors return 422 with clear message (invalid format, corrupted data)
 
-### Testing & Error Resilience
+### Observability
 
-- [x] **TST-01**: Database client is injectable via NestJS custom provider token (`DRIZZLE`), enabling test database swapping
-- [x] **TST-02**: In-memory SQLite database configured for test environment via Jest setup
-- [x] **TST-03**: LLM parsing failures propagate as HTTP 502/503 errors instead of silently returning `{ amount: 0, merchant: 'Unknown' }`
-- [x] **TST-04**: OpenRouter API client configured with 8s timeout and 1 retry for transient failures
-- [x] **TST-05**: All required environment variables validated at startup via `ConfigModule.forRoot({ validate })` with descriptive errors
+- [x] **TRC-01**: Every request generates or propagates `x-request-id` UUID
+- [x] **TRC-02**: Request ID included in all Pino log entries for that request
+- [x] **TRC-03**: Request ID included in Sentry scope for error tracking
+- [x] **TRC-04**: Response headers include `x-request-id` for client-side tracing
+- [x] **PER-01**: Sentry performance tracing enabled with `tracesSampleRate: 0.1`
+- [x] **PER-02**: LLM parsing spans measure full duration (request → OpenRouter → response)
+- [x] **PER-03**: Database query spans measure slow queries (>100ms)
 
-### Automated Quality Gates
+### API Evolution
 
-- [x] **QAL-01**: Unit tests cover all 6 NestJS services (categories, transactions, input, insights, account, rate-limit guard)
-- [x] **QAL-02**: Unit tests cover utility functions (Vietnamese regex amount parsing, merchant keyword lookup, LLM prompt formatting)
-- [x] **QAL-03**: E2E tests cover all 10 API endpoints with happy-path scenarios using test database
-- [x] **QAL-04**: CI pipeline (GitHub Actions) runs `npm run lint`, `npm run test`, and `drizzle-kit check` on every PR
+- [x] **VER-01**: All endpoints available under `/api/v1/` prefix
+- [x] **VER-02**: Unversioned `/api/` routes continue working (backward compatible)
+- [x] **VER-03**: Controllers use `@Version('1')` decorator
+- [x] **VER-04**: Swagger docs reflect versioned paths
 
-### Performance
+### Reliability
 
-- [x] **PERF-01**: Transaction listing (`GET /api/transactions`) returns cursor-based paginated results with `{ data, total, hasMore }` metadata
-- [x] **PERF-02**: Monthly insights use SQL aggregation (`GROUP BY`, `SUM`, `COUNT`) instead of in-memory JavaScript `reduce()`
-- [x] **PERF-03**: Month filtering uses date range queries (`>= '2026-04-01' AND < '2026-05-01'`) instead of `LIKE 'YYYY-MM%'`
-- [x] **PERF-04**: `vercel.json` configured with `maxDuration: 30` for LLM endpoints and `runtime: nodejs20.x`
+- [x] **GRF-01**: Graceful shutdown handles SIGTERM — finishes in-flight requests before exit
+- [x] **GRF-02**: Health endpoint returns 503 during shutdown (load balancer removes instance)
+- [x] **GRF-03**: Shutdown completes within 10 seconds
+- [x] **TMO-01**: Request timeout interceptor returns 408 after 25 seconds
+- [x] **TMO-02**: LLM endpoints (input/text, input/image) have 25s timeout
+- [x] **TMO-03**: CRUD endpoints have 10s timeout
+- [x] **TMO-04**: Timeout errors include clear message: "Request timeout — please retry"
 
-### Observability & Documentation
+### Developer Experience
 
-- [ ] **OBS-01**: Sentry captures all unhandled NestJS exceptions via global exception filter and bootstrap initialization
-- [ ] **OBS-02**: Health endpoint (`GET /api/health`) verifies database connectivity and Redis ping, not just server liveness
-- [ ] **OBS-03**: OpenAPI/Swagger documentation (`@nestjs/swagger`) available at `/api/docs` with all endpoints decorated
-- [ ] **OBS-04**: `vercel.json` pins Node.js 20.x runtime explicitly to match `package.json` engines requirement
+- [x] **UTL-01**: Duplicate date/month parsing logic extracted to shared utility
+- [x] **UTL-02**: Duplicate formatting logic extracted to shared utility
+- [x] **UTL-03**: All extracted utilities have unit tests
+- [x] **STG-01**: `.env.staging` file documents staging environment variables
+- [x] **STG-02**: Staging config uses separate Turso database and Redis instance
+- [x] **STG-03**: Documentation explains how to deploy to staging vs production
 
 ## Future Requirements
 
-Deferred to post-v1.0 milestones. Tracked but not in current roadmap.
+Deferred to v1.2+ milestones. Tracked but not in current roadmap.
 
-### Post-Launch Differentiators (v1.1+)
+### Analytics & Growth (v1.2)
 
-- **DIF-01**: Categories list cached in Redis with 60s TTL and instrumented hit/miss logging
-- **DIF-02**: Apple Sign-In OAuth provider added for App Store compliance
-- **DIF-03**: Sentry performance tracing enabled for LLM parsing spans
-- **DIF-04**: Correlation IDs (x-request-id) propagated through all service calls
-- **DIF-05**: Shared utility extraction (duplicate month parsing, date utils)
-- **DIF-06**: API versioning strategy (`/api/v1/...`) for future breaking changes
-- **DIF-07**: Graceful shutdown handler for local development (SIGTERM/SIGINT)
-- **DIF-08**: Request timeout interceptor (408 for routes exceeding threshold)
-- **DIF-09**: Legacy categories id/slug mapping removed (mobile client uses real database ID)
-- **DIF-10**: Staging/preview environment with separate Turso database and Redis instance
-- **DIF-11**: PostHog product analytics for feature usage tracking
-- **DIF-12**: Server-side image resize before LLM API call (reduce payload from ~15MB to ~200KB)
+- **ANL-01**: PostHog product analytics integration
+- **ANL-02**: Feature usage tracking (input method breakdown, category distribution)
+- **ANL-03**: Funnel analysis (sign up → first expense → retention)
+
+### Advanced Features (v1.2+)
+
+- **PUSH-01**: Push notifications for budget alerts — v1.2
+- **PUSH-02**: Daily spending summary notification — v1.2
+- **MULTI-01**: Multi-currency support — v3.0
+- **BATCH-01**: Batch expense detection (multiple items per message) — future
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Microservices / service mesh | Over-engineering for solo dev, <1000 users. Monolith scales to ~10K users on Vercel |
-| Message queue (Bull/BullMQ) | No async workloads requiring queue. LLM calls are synchronous user-initiated |
-| GraphQL API | REST is sufficient for current feature set. No nested/resource-heavy queries |
-| WebSocket support | Not compatible with Vercel serverless. Not needed for expense tracking |
-| Custom auth system | Better Auth is stable, well-maintained, and handles all current needs |
-| Database migration to PostgreSQL | Turso free tier covers up to 1000 users. Migrate only when free tier is exceeded |
-| Kubernetes / container orchestration | Vercel serverless platform handles scaling automatically |
-| Multi-region deployment | Turso is edge-distributed. Single Vercel region is sufficient for Vietnam market |
-| Custom Terraform / Pulumi IaC | Config complexity not justified for solo dev. Vercel dashboard + env vars sufficient |
-| Real-time expense sync (WebSocket/SSE) | Vercel serverless limitation. HTTP polling sufficient for v1 |
-| Timestamp TEXT→INTEGER migration for existing columns | High-risk, low-reward. LIKE queries work correctly on ISO text. Accept inconsistency for v1.0 |
+| Microservices / service mesh | Over-engineering for <1000 users |
+| Message queue (Bull/BullMQ) | No async workloads requiring queue |
+| GraphQL API | REST sufficient for mobile app |
+| WebSocket support | Not compatible with Vercel serverless |
+| PostgreSQL migration | Turso free tier sufficient for current scale |
+| RevenueCat subscriptions | v2.0 feature |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DB-01 | Phase 1 | Pending |
-| DB-02 | Phase 1 | Pending |
-| DB-03 | Phase 1 | Pending |
-| DB-04 | Phase 1 | Pending |
-| DB-05 | Phase 1 | Pending |
-| SEC-01 | Phase 2 | Pending |
-| SEC-02 | Phase 2 | Pending |
-| SEC-03 | Phase 2 | Pending |
-| SEC-04 | Phase 2 | Pending |
-| SEC-05 | Phase 2 | Pending |
-| TST-01 | Phase 3 | Pending |
-| TST-02 | Phase 3 | Pending |
-| TST-03 | Phase 3 | Pending |
-| TST-04 | Phase 3 | Pending |
-| TST-05 | Phase 3 | Pending |
-| QAL-01 | Phase 4 | Pending |
-| QAL-02 | Phase 4 | Pending |
-| QAL-03 | Phase 4 | Pending |
-| QAL-04 | Phase 4 | Pending |
-| PERF-01 | Phase 5 | Pending |
-| PERF-02 | Phase 5 | Pending |
-| PERF-03 | Phase 5 | Pending |
-| PERF-04 | Phase 5 | Pending |
-| OBS-01 | Phase 6 | Pending |
-| OBS-02 | Phase 6 | Pending |
-| OBS-03 | Phase 6 | Pending |
-| OBS-04 | Phase 6 | Pending |
+| TRC-01 | Phase 8 | Done |
+| TRC-02 | Phase 8 | Done |
+| TRC-03 | Phase 8 | Done |
+| TRC-04 | Phase 8 | Done |
+| VER-01 | Phase 9 | Done |
+| VER-02 | Phase 9 | Done |
+| VER-03 | Phase 9 | Done |
+| VER-04 | Phase 9 | Done |
+| APL-01 | Phase 10 | Done |
+| APL-02 | Phase 10 | Done |
+| APL-03 | Phase 10 | Done |
+| CCH-01 | Phase 11 | Done |
+| CCH-02 | Phase 11 | Done |
+| CCH-03 | Phase 11 | Done |
+| PER-01 | Phase 11 | Done |
+| PER-02 | Phase 11 | Done |
+| PER-03 | Phase 11 | Done |
+| TMO-01 | Phase 12 | Done |
+| TMO-02 | Phase 12 | Done |
+| TMO-03 | Phase 12 | Done |
+| TMO-04 | Phase 12 | Done |
+| IMG-01 | Phase 12 | Done |
+| IMG-02 | Phase 12 | Done |
+| IMG-03 | Phase 12 | Done |
+| GRF-01 | Phase 13 | Done |
+| GRF-02 | Phase 13 | Done |
+| GRF-03 | Phase 13 | Done |
+| UTL-01 | Phase 13 | Done |
+| UTL-02 | Phase 13 | Done |
+| UTL-03 | Phase 13 | Done |
+| STG-01 | Phase 13 | Done |
+| STG-02 | Phase 13 | Done |
+| STG-03 | Phase 13 | Done |
 
 **Coverage:**
-- v1 requirements: 25 total
-- Mapped to phases: 25
+- v1.1 requirements: 30 total
+- Mapped to phases: 30
 - Unmapped: 0 ✓
 
 ---
-*Requirements defined: 2026-04-26*
-*Last updated: 2026-04-26 after research synthesis*
+*Requirements defined: 2026-04-27*
+*Last updated: 2026-04-27 after research synthesis*

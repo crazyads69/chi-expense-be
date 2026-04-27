@@ -5,9 +5,11 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import OpenAI from 'openai';
+import * as Sentry from '@sentry/nestjs';
 import { getOpenAIClient } from '../lib/openrouter';
 import { MERCHANT_CATEGORY_MAP } from '../lib/merchant-table';
 import { SYSTEM_PROMPT, USER_PROMPT_TEMPLATE } from '../lib/prompts';
+import { resizeImageForLLM } from '../lib/image-resize';
 
 const MAX_MESSAGE_LENGTH = 500;
 const MAX_MERCHANT_LENGTH = 50;
@@ -103,18 +105,22 @@ export class InputService {
 
     try {
       const openai = getOpenAIClient();
-      const response = await openai.chat.completions.create({
-        model: 'qwen/qwen3-8b',
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          {
-            role: 'user',
-            content: USER_PROMPT_TEMPLATE(this.sanitizeUserMessage(message)),
-          },
-        ],
-        temperature: LLM_TEMPERATURE,
-        max_tokens: LLM_TEXT_MAX_TOKENS,
-      });
+      const response = await Sentry.startSpan(
+        { op: 'llm.parse', name: 'Parse Text Expense' },
+        async () =>
+          openai.chat.completions.create({
+            model: 'qwen/qwen3-8b',
+            messages: [
+              { role: 'system', content: SYSTEM_PROMPT },
+              {
+                role: 'user',
+                content: USER_PROMPT_TEMPLATE(this.sanitizeUserMessage(message)),
+              },
+            ],
+            temperature: LLM_TEMPERATURE,
+            max_tokens: LLM_TEXT_MAX_TOKENS,
+          }),
+      );
 
       const content = response.choices[0]?.message?.content || '';
       const jsonMatch = content.match(/\{[\s\S]*?\}/);
@@ -184,31 +190,51 @@ export class InputService {
     userId: string,
     imageBase64: string,
   ): Promise<ParsedExpense> {
+    let resizedImage: string;
+    try {
+      resizedImage = await resizeImageForLLM(imageBase64);
+    } catch (error) {
+      this.logger.warn(
+        { error: error instanceof Error ? error.message : error },
+        'Image resize failed',
+      );
+      throw new HttpException(
+        error instanceof Error
+          ? error.message
+          : 'Invalid image: could not process receipt image',
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
     try {
       const openai = getOpenAIClient();
-      const response = await openai.chat.completions.create({
-        model: 'openai/gpt-4o-mini',
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          {
-            role: 'user',
-            content: [
+      const response = await Sentry.startSpan(
+        { op: 'llm.parse', name: 'Parse Image Expense' },
+        async () =>
+          openai.chat.completions.create({
+            model: 'openai/gpt-4o-mini',
+            messages: [
+              { role: 'system', content: SYSTEM_PROMPT },
               {
-                type: 'text',
-                text: 'Extract the expense details from this receipt.',
-              },
-              {
-                type: 'image_url',
+                role: 'user',
+                content: [
+                  {
+                    type: 'text',
+                    text: 'Extract the expense details from this receipt.',
+                  },
+                  {
+                    type: 'image_url',
                 image_url: {
-                  url: imageBase64,
+                  url: resizedImage,
                 },
+                  },
+                ],
               },
             ],
-          },
-        ],
-        temperature: LLM_TEMPERATURE,
-        max_tokens: LLM_IMAGE_MAX_TOKENS,
-      });
+            temperature: LLM_TEMPERATURE,
+            max_tokens: LLM_IMAGE_MAX_TOKENS,
+          }),
+      );
 
       const content = response.choices[0]?.message?.content || '';
       const jsonMatch = content.match(/\{[\s\S]*?\}/);

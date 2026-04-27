@@ -11,13 +11,22 @@ jest.mock('../lib/openrouter', () => ({
   getOpenAIClient: jest.fn(),
 }));
 
+// Mock image resize to avoid sharp dependency in unit tests
+jest.mock('../lib/image-resize', () => ({
+  resizeImageForLLM: jest.fn((image: string) => Promise.resolve(image)),
+}));
+
 import { getOpenAIClient } from '../lib/openrouter';
+import { resizeImageForLLM } from '../lib/image-resize';
 
 describe('InputService', () => {
   let service: InputService;
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    (resizeImageForLLM as jest.Mock).mockImplementation((image: string) =>
+      Promise.resolve(image),
+    );
     service = new InputService();
   });
 
@@ -146,14 +155,29 @@ describe('InputService', () => {
         '{"amount": 75000, "merchant": "Receipt Shop", "category": "Mua sắm"}',
       );
 
-      const result = await service.parseImage(
-        'test-user',
-        'data:image/jpeg;base64,abc123',
-      );
+      const image = 'data:image/jpeg;base64,abc123';
+      const result = await service.parseImage('test-user', image);
 
+      expect(resizeImageForLLM).toHaveBeenCalledWith(image);
       expect(result.amount).toBe(75000);
       expect(result.merchant).toBe('Receipt Shop');
       expect(result.category).toBe('Mua sắm');
+    });
+
+    it('should throw 422 on image resize failure', async () => {
+      (resizeImageForLLM as jest.Mock).mockRejectedValue(
+        new Error('Invalid image format'),
+      );
+
+      try {
+        await service.parseImage('test-user', 'data:image/jpeg;base64,abc123');
+        fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(HttpException);
+        expect((error as HttpException).getStatus()).toBe(
+          HttpStatus.UNPROCESSABLE_ENTITY,
+        );
+      }
     });
 
     it('should throw 503 on LLM API error', async () => {

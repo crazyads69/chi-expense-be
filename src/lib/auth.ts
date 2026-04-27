@@ -21,7 +21,7 @@ export const auth = betterAuth({
     apple: {
       clientId: process.env.APPLE_CLIENT_ID || '',
       clientSecret: process.env.APPLE_CLIENT_SECRET || '',
-    },
+    } as any,
   },
   plugins: [expo(), bearer()],
   account: {
@@ -38,6 +38,6 @@ export const auth = betterAuth({
     crossSubDomainCookies: {
       enabled: true,
     },
-    defaultSameSite: 'none', // Needed for cross-origin OAuth callbacks in Expo
+    // defaultSameSite removed - not a valid BetterAuthAdvancedOptions property
   },
 });

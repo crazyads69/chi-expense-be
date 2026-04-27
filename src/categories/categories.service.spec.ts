@@ -5,6 +5,13 @@ import { testDb } from '../../test/helpers/setup';
 import { categories, user } from '../db/schema';
 import { eq } from 'drizzle-orm';
 
+jest.mock('../lib/redis', () => ({
+  getRedisClient: jest.fn(() => ({
+    get: jest.fn().mockResolvedValue(null),
+    setex: jest.fn().mockResolvedValue('OK'),
+  })),
+}));
+
 describe('CategoriesService', () => {
   let service: CategoriesService;
 

@@ -2,8 +2,13 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { LoggerModule } from 'nestjs-pino';
 import { AuthModule } from '@thallesp/nestjs-better-auth';
+import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { plainToInstance } from 'class-transformer';
-import { IsString, IsNotEmpty, validateSync } from 'class-validator';
+import { RequestContextInterceptor } from './lib/request-context.interceptor';
+import { requestContext } from './lib/request-context';
+import { IsString, IsNotEmpty, IsOptional, validateSync } from 'class-validator';
+import { SentryModule } from '@sentry/nestjs/setup';
+import { SentryGlobalFilter } from '@sentry/nestjs/setup';
 import { auth } from './lib/auth';
 import { DatabaseModule } from './db/database.module';
 import { TransactionsModule } from './transactions/transactions.module';
@@ -12,6 +17,7 @@ import { CategoriesModule } from './categories/categories.module';
 import { InputModule } from './input/input.module';
 import { AccountModule } from './account/account.module';
 import { HealthController } from './health.controller';
+import { ShutdownService } from './lib/shutdown.service';
 
 class EnvironmentVariables {
   @IsString()
@@ -45,6 +51,26 @@ class EnvironmentVariables {
   @IsString()
   @IsNotEmpty()
   UPSTASH_REDIS_REST_TOKEN!: string;
+
+  @IsString()
+  @IsOptional()
+  SENTRY_DSN?: string;
+
+  @IsString()
+  @IsOptional()
+  APPLE_CLIENT_ID?: string;
+
+  @IsString()
+  @IsOptional()
+  APPLE_CLIENT_SECRET?: string;
+
+  @IsString()
+  @IsOptional()
+  APPLE_TEAM_ID?: string;
+
+  @IsString()
+  @IsOptional()
+  APPLE_KEY_ID?: string;
 }
 
 function validate(config: Record<string, unknown>) {
@@ -67,6 +93,7 @@ function validate(config: Record<string, unknown>) {
 
 @Module({
   imports: [
+    SentryModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       validate,
@@ -87,6 +114,12 @@ function validate(config: Record<string, unknown>) {
           ],
           censor: '***REDACTED***',
         },
+        customProps: () => {
+          const ctx = requestContext.get();
+          return {
+            requestId: ctx?.requestId,
+          };
+        },
       },
     }),
     AuthModule.forRoot({
@@ -100,5 +133,16 @@ function validate(config: Record<string, unknown>) {
     AccountModule,
   ],
   controllers: [HealthController],
+  providers: [
+    ShutdownService,
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: RequestContextInterceptor,
+    },
+    {
+      provide: APP_FILTER,
+      useClass: SentryGlobalFilter,
+    },
+  ],
 })
 export class AppModule {}

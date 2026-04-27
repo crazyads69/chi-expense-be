@@ -4,6 +4,7 @@ import type { DrizzleDatabase } from '../db/db-token';
 import { categories } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
+import { getRedisClient } from '../lib/redis';
 
 const DEFAULT_CATEGORIES = [
   { name: 'Ăn uống', slug: 'an-uong' },
@@ -15,6 +16,9 @@ const DEFAULT_CATEGORIES = [
   { name: 'Giáo dục', slug: 'giao-duc' },
   { name: 'Khác', slug: 'khac' },
 ];
+
+const CACHE_TTL = 60; // 60 seconds
+const CACHE_PREFIX = 'categories';
 
 export interface CategoryResponse {
   id: string;
@@ -33,6 +37,36 @@ export class CategoriesService {
   ) {}
 
   async list(userId: string): Promise<CategoryResponse[]> {
+    const cacheKey = `${CACHE_PREFIX}:${userId}`;
+
+    // Try to get from cache
+    try {
+      const redis = getRedisClient();
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        this.logger.log({ cache: 'hit', userId, key: cacheKey }, 'Categories cache hit');
+        return JSON.parse(cached as string);
+      }
+    } catch (error) {
+      this.logger.warn({ error: (error as Error).message }, 'Redis cache read failed');
+    }
+
+    // Cache miss - fetch from DB
+    this.logger.log({ cache: 'miss', userId, key: cacheKey }, 'Categories cache miss');
+    const result = await this.fetchFromDb(userId);
+
+    // Store in cache
+    try {
+      const redis = getRedisClient();
+      await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(result));
+    } catch (error) {
+      this.logger.warn({ error: (error as Error).message }, 'Redis cache write failed');
+    }
+
+    return result;
+  }
+
+  private async fetchFromDb(userId: string): Promise<CategoryResponse[]> {
     const userCategories = await this.db
       .select()
       .from(categories)
@@ -63,7 +97,7 @@ export class CategoriesService {
       return initializedCategories.map((cat) => ({
         name: cat.name,
         slug: cat.slug,
-        id: cat.slug,
+        id: cat.id,
         budget: cat.budget,
       }));
     }
@@ -71,7 +105,7 @@ export class CategoriesService {
     return userCategories.map((cat) => ({
       name: cat.name,
       slug: cat.slug,
-      id: cat.slug,
+      id: cat.id,
       budget: cat.budget,
     }));
   }

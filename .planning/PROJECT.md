@@ -25,18 +25,30 @@ Log an expense in 2 seconds with zero UI friction — type Vietnamese, take a ph
 - ✓ Structured logging with Pino (`nestjs-pino`) — existing
 - ✓ Vercel serverless deployment (cached server instance pattern) — existing
 
+### Validated (v1.0)
+
+- ✓ Fix critical security issues (CORS, rate limiter spoofing, prompt injection) — Phase 2
+- ✓ Fix critical reliability gaps (LLM error handling, DB client resilience, timeouts) — Phase 3
+- ✓ Fix performance bottlenecks (pagination, SQL aggregation, caching) — Phase 5
+- ✓ Establish testing (unit tests for all services, fix e2e test) — Phase 4
+- ✓ Establish database migration history (generate initial migrations) — Phase 1
+- ✓ Standardize schema types (timestamp consistency, missing indices) — Phase 1
+- ✓ Fix deployment config (Node.js version, maxDuration, env validation) — Phase 5
+- ✓ Add API documentation (OpenAPI/Swagger) — Phase 6
+- ✓ Add observability — Sentry error tracking — Phase 6
+
 ### Active
 
-- [ ] Fix critical security issues (CORS, rate limiter spoofing, prompt injection)
-- [ ] Fix critical reliability gaps (LLM error handling, DB client resilience, timeouts)
-- [ ] Fix performance bottlenecks (pagination, SQL aggregation, caching)
-- [ ] Establish testing (unit tests for all services, fix e2e test)
-- [ ] Establish database migration history (generate initial migrations)
-- [ ] Standardize schema types (timestamp consistency, missing indices)
-- [ ] Fix deployment config (Node.js version, maxDuration, env validation)
-- [ ] Add API documentation (OpenAPI/Swagger)
 - [ ] Add Apple OAuth for App Store compliance
-- [ ] Add observability (Sentry/PostHog)
+- [ ] Add Redis caching for categories with hit/miss metrics
+- [ ] Add Sentry performance tracing for LLM spans
+- [ ] Add x-request-id correlation headers
+- [ ] Add API versioning strategy (/api/v1/)
+- [ ] Add graceful shutdown handler (SIGTERM/SIGINT)
+- [ ] Add request timeout interceptor
+- [ ] Add server-side image resize before LLM
+- [ ] Extract shared utilities (DRY principle)
+- [ ] Add staging/preview environment config
 
 ### Out of Scope
 
@@ -49,11 +61,11 @@ Log an expense in 2 seconds with zero UI friction — type Vietnamese, take a ph
 
 ## Context
 
-**Current state:** NestJS 11 backend is functional with all core features implemented (auth, CRUD, LLM parsing, insights, rate limiting). Deployable to Vercel with Turso (libSQL) database and Upstash Redis.
+**Current state:** NestJS 11 backend is production-ready with v1.0 complete. All core features implemented (auth, CRUD, LLM parsing, insights, rate limiting), comprehensive test coverage (51 unit + 12 E2E tests), security hardened, performance optimized, and observable (Sentry, health checks, Swagger docs). Deployable to Vercel with Turso (libSQL) database and Upstash Redis.
 
-**Codebase audit completed (2026-04-26):** 50 issues identified across 8 categories — 2 critical, 8 high, 22 medium, 18 low. Key gaps: zero automated tests, no database migrations, permissive CORS, LLM error handling is silent, no pagination on transaction listing, in-memory insights computation.
+**v1.0 audit (2026-04-27):** All 25 requirements complete. Minor tech debt identified: Redis health check timeout, Swagger response DTOs, health controller Redis mock pattern.
 
-**Production readiness:** The codebase works for single-user testing but has gaps before multi-user commercial launch: testing, migration versioning, security hardening, performance optimization, and observability.
+**Scalability gaps for v1.1:** No caching layer, no request tracing, no API versioning, no graceful shutdown, no image optimization, missing Apple OAuth for App Store compliance.
 
 ## Constraints
 
@@ -75,18 +87,34 @@ Log an expense in 2 seconds with zero UI friction — type Vietnamese, take a ph
 | Vercel Pro over Hobby | Required for commercial use, larger timeouts, Fluid Compute | ✓ Good |
 | `@thallesp/nestjs-better-auth` over manual middleware | NestJS DI integration, session decorator, community-maintained | ⚠️ Revisit (community lib, may break) |
 
-## Current Milestone: v1.0 — Code Hardening & Production Readiness
+## Current Milestone: v1.1 — Production Maturity & Scalability
 
-**Goal:** Fix all critical/high issues from codebase audit, establish testing and migration infrastructure, harden security, and prepare for multi-user commercial launch.
+**Goal:** Apply big-tech engineering practices to make the backend scalable, observable, and App Store compliant.
 
 **Target features:**
-- Fix 2 critical + 8 high-severity issues from CONCERNS.md
-- Unit test coverage for all services
-- Database migrations with version history
-- Security hardening (CORS, rate limiter, prompt injection)
-- Performance optimization (pagination, SQL aggregation, caching)
-- Deployment hardening (Node.js version, maxDuration, env validation)
-- API documentation (OpenAPI/Swagger)
+- Apple Sign-In OAuth for App Store compliance
+- Redis caching for categories (60s TTL) with hit/miss metrics
+- Sentry performance tracing for LLM parsing spans
+- x-request-id correlation headers across all requests
+- API versioning strategy (/api/v1/) for future breaking changes
+- Graceful shutdown handler for zero-downtime deploys
+- Request timeout interceptor (408 instead of 504)
+- Server-side image resize before LLM API call (15MB → 200KB)
+- Extract shared utilities (DRY — duplicate date parsing, month logic)
+- Staging/preview environment with separate Turso DB and Redis
+
+## Previous Milestone: v1.0 — Code Hardening & Production Readiness
+
+**Completed:** 2026-04-27
+**Requirement Coverage:** 25/25 (100%)
+
+**Delivered:**
+- Database foundation with Drizzle migrations and schema fixes
+- Security hardening (CORS, rate limiting, input sanitization, OAuth validation)
+- Test infrastructure with dependency injection and in-memory SQLite
+- Automated quality gates (unit tests, E2E tests, CI pipeline)
+- Performance optimization (pagination, SQL aggregation, Vercel config)
+- Observability (Sentry error tracking, health checks, Swagger documentation)
 
 ## Evolution
 
@@ -106,4 +134,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-26 after initialization*
+*Last updated: 2026-04-27 after v1.0 completion and v1.1 initialization*

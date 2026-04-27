@@ -1,11 +1,17 @@
 import * as dotenv from 'dotenv';
 dotenv.config();
 
+// Import Sentry instrumentation first (must be before any other modules)
+import './instrument';
+
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, VersioningType } from '@nestjs/common';
 import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
+import { TimeoutInterceptor } from './lib/timeout.interceptor';
+import * as Sentry from '@sentry/nestjs';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { db } from './db/client';
 import { migrate } from 'drizzle-orm/libsql/migrator';
 
@@ -21,12 +27,21 @@ async function bootstrap(): Promise<Express> {
     console.log('[migration] Database migrations up to date.');
   } catch (error) {
     console.error('[migration] Migration failed:', error);
+    Sentry.captureException(error);
     process.exit(1);
   }
 
   const app = await NestFactory.create(AppModule, {
     bodyParser: false, // Required by @thallesp/nestjs-better-auth to parse requests correctly
     bufferLogs: true,
+  });
+
+  app.enableShutdownHooks();
+
+  // Enable URI-based API versioning
+  app.enableVersioning({
+    type: VersioningType.URI,
+    defaultVersion: '1',
   });
 
   app.useLogger(app.get(Logger));
@@ -41,6 +56,8 @@ async function bootstrap(): Promise<Express> {
       forbidNonWhitelisted: true,
     }),
   );
+
+  app.useGlobalInterceptors(new TimeoutInterceptor());
 
   const allowedOrigins = [
     process.env.FRONTEND_URL || 'http://localhost:8081',
@@ -61,6 +78,29 @@ async function bootstrap(): Promise<Express> {
     credentials: true,
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  });
+
+  // Swagger/OpenAPI documentation
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('Chi Expense API')
+    .setDescription('Zero-friction expense tracking API for Chi Expense mobile app')
+    .setVersion('1.0.0')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        description: 'Enter your Bearer token (session token from Better Auth)',
+      },
+      'bearer',
+    )
+    .build();
+
+  const document = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup('api/docs', app, document, {
+    swaggerOptions: {
+      persistAuthorization: true,
+    },
   });
 
   await app.init();

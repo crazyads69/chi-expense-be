@@ -12,6 +12,7 @@ import { eq, and, desc, gte, lt, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
+import { parseMonth, getMonthBoundaries, nowISO } from '../lib/date-utils';
 
 @Injectable()
 export class TransactionsService {
@@ -27,7 +28,10 @@ export class TransactionsService {
     page: number = 1,
     limit: number = 50,
   ) {
-    if (month && !/^\d{4}-\d{2}$/.test(month)) {
+    let targetMonth: string;
+    try {
+      targetMonth = parseMonth(month);
+    } catch {
       throw new BadRequestException('Invalid month format. Expected YYYY-MM');
     }
 
@@ -35,15 +39,9 @@ export class TransactionsService {
     const validatedLimit = Math.min(100, Math.max(1, limit));
     const offset = (validatedPage - 1) * validatedLimit;
 
-    const now = new Date();
-    const targetMonth =
-      month ||
-      `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-
-    const startOfMonth = `${targetMonth}-01T00:00:00.000Z`;
-    const endDate = new Date(startOfMonth);
-    endDate.setMonth(endDate.getMonth() + 1);
-    const endOfMonth = endDate.toISOString();
+    const { start, end } = getMonthBoundaries(targetMonth);
+    const startOfMonth = start.toISOString();
+    const endOfMonth = end.toISOString();
 
     const whereClause = and(
       eq(transactions.userId, userId),
@@ -74,7 +72,7 @@ export class TransactionsService {
   }
 
   async create(userId: string, dto: CreateTransactionDto) {
-    const now = new Date().toISOString();
+    const now = nowISO();
     const id = nanoid();
 
     // As per spec, expenses are stored as negative amounts internally if they are outflows
@@ -102,9 +100,9 @@ export class TransactionsService {
   }
 
   async update(userId: string, id: string, dto: UpdateTransactionDto) {
-    const updateData: Record<string, any> = {
+    const updateData: Partial<typeof transactions.$inferInsert> = {
       ...dto,
-      updatedAt: new Date().toISOString(),
+      updatedAt: nowISO(),
     };
 
     if (dto.amount !== undefined) {

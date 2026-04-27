@@ -7,10 +7,22 @@ let ratelimitClient: Ratelimit;
 
 export const getRedisClient = () => {
   if (!redisClient) {
-    redisClient = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL || '',
-      token: process.env.UPSTASH_REDIS_REST_TOKEN || '',
-    });
+    if (process.env.NODE_ENV === 'test') {
+      redisClient = {
+        get: async () => null,
+        setex: async () => 'OK',
+        ping: async () => 'PONG',
+      } as unknown as Redis;
+    } else {
+      const url = process.env.UPSTASH_REDIS_REST_URL;
+      const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+      if (!url || !token) {
+        throw new Error(
+          'Redis configuration missing: UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required',
+        );
+      }
+      redisClient = new Redis({ url, token });
+    }
   }
   return redisClient;
 };

@@ -1,276 +1,180 @@
-# Domain Pitfalls — NestJS Serverless Hardening
+# Research: Pitfalls for v1.1
 
-**Domain:** NestJS 11 serverless API hardening for production
-**Researched:** 2026-04-26
+**Research Date:** 2026-04-27
+**Milestone:** v1.1 — Production Maturity & Scalability
+**Dimension:** Pitfalls
 
-## Critical Pitfalls
+---
 
-Mistakes that cause rewrites or major production incidents.
+## Pitfall 1: Sharp in Serverless (High Risk)
 
-### Pitfall 1: Sentry Not Initialized Before NestJS Bootstrap
-**What goes wrong:** Calling `Sentry.init()` inside a NestJS module constructor or after `NestFactory.create()`. Sentry SDK must patch the runtime (global error handlers, promise rejection tracking) BEFORE NestJS takes over error handling.
+**Problem:** Sharp uses native bindings (libvips). Vercel serverless has restrictions on binary sizes and native modules.
 
-**Why it happens:** Developers naturally place initialization code in NestJS modules. The Sentry NestJS docs emphasize "import this first!" but it's easy to miss.
-
-**Consequences:** Unhandled exceptions, uncaught promise rejections, and Express errors are not reported to Sentry. The `SentryGlobalFilter` catches NestJS-layer exceptions but not Node.js-level crashes (e.g., `unhandledRejection` from the Drizzle client).
+**Warning Signs:**
+- Build succeeds but runtime fails with "Cannot find module"
+- Cold start increases from ~500ms to ~3s
+- Function size exceeds Vercel's 50MB limit
 
 **Prevention:**
-```typescript
-// src/main.ts — CORRECT order
-import './instrument';                // ← FIRST: Sentry.init() runs before anything else
-import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
+- Test `npm run build` then deploy to Vercel preview immediately
+- Use `sharp` in `dependencies` (not devDependencies)
+- Consider `jimp` as fallback if Sharp fails in serverless
 
-// For Vercel lazy bootstrap:
-async function bootstrap() {
-  // Sentry already initialized by instrument.ts import
-  const app = await NestFactory.create(AppModule);
-  return app;
-}
-```
-
-**Detection:** Check if Sentry receives `unhandledRejection` events in production. If missing, initialization order is wrong.
+**Which Phase Should Address It:** Image Resize phase — include Vercel deployment test in success criteria
 
 ---
 
-### Pitfall 2: PostHog Events Lost on Vercel Serverless Termination
-**What goes wrong:** Using PostHog's default batching configuration (`flushAt: 15` events or `flushInterval: 10000` ms) on Vercel serverless. The function terminates after sending the HTTP response, potentially before the batch flush timer fires.
+## Pitfall 2: Cache Stampede (Medium Risk)
 
-**Why it happens:** PostHog's Node SDK is designed for long-running servers (Express/Fastify). Vercel functions have a different lifecycle: request → response → termination. The SDK's default assumes the process stays alive.
+**Problem:** When cache expires, multiple concurrent requests hit the DB simultaneously.
 
-**Consequences:** Analytics data gaps. Product decisions based on incomplete data. Silent data loss with no error indication.
+**Scenario:**
+1. 100 users open app at 9:00 AM
+2. All request categories
+3. Cache TTL expires at exactly 9:00:00
+4. 100 concurrent DB queries for categories
+
+**Warning Signs:**
+- DB connection pool exhaustion
+- Spikes in latency at regular intervals (TTL boundaries)
 
 **Prevention:**
-```typescript
-const posthog = new PostHog(process.env.POSTHOG_API_KEY!, {
-  host: 'https://eu.i.posthog.com',
-  flushAt: 1,          // send each event immediately
-  flushInterval: 0,    // no timer-based flush
-});
-```
+- Use cache warming (background refresh before TTL)
+- Or implement probabilistic early expiration (refresh at 80% of TTL)
+- For v1.1: acceptable to accept stampede risk — categories table is small
 
-**Detection:** Compare PostHog event counts against server-side log counts. Gaps indicate lost events.
+**Which Phase Should Address It:** Redis Caching phase — document stampede risk, implement if time permits
 
 ---
 
-### Pitfall 3: Test Database Hitting Production Turso
-**What goes wrong:** Writing unit tests that call the production Drizzle client (`src/db/client.ts` singleton) instead of an in-memory SQLite database. Every test run modifies the production database.
+## Pitfall 3: Apple OAuth Key Management (High Risk)
 
-**Why it happens:** The current architecture exports `db` as a module-level singleton (`export const db = drizzle(client, { schema })`). Services import this directly. Without a provider token refactor, there's no injection point for a mock.
+**Problem:** Apple requires a JWT client secret signed with a private key. Key rotation is manual.
 
-**Consequences:** Tests create/delete real user data. CI runs pollute production database. Test failures can corrupt real data. Tests are not repeatable.
-
-**Prevention:** Refactor `db` to use a NestJS custom provider token BEFORE writing database-touching tests. The pattern:
-1. Create `DRIZZLE_CLIENT` injection token in `src/db/db.provider.ts`
-2. Export from a `DatabaseModule` (not as a module-level singleton)
-3. In tests, override with `better-sqlite3 :memory:` instance
-4. Run schema creation in `beforeAll()`
-
-**Detection:** If any test file imports from `src/db/client.ts` instead of using dependency injection, it's hitting production.
-
----
-
-### Pitfall 4: Migration Drift — `drizzle-kit push` vs `generate + migrate`
-**What goes wrong:** Using `drizzle-kit push` to directly sync schema to production. No migration files are created. Schema changes have no audit trail.
-
-**Why it happens:** `push` is the fastest development workflow. Developers stick with it because it's convenient. Production should use `generate` then `migrate`.
-
-**Consequences:** No way to reproduce the database state in a new environment. Rollback impossible. Multiple developers can conflict on schema changes. No CI validation that migrations match the schema.
+**Warning Signs:**
+- "invalid_client" errors from Apple
+- Users can't sign in suddenly
+- Key expires every 6 months (Apple requirement)
 
 **Prevention:**
-```bash
-# Development (local only):
-npx drizzle-kit push
+- Store private key in env var (not in code)
+- Document key rotation process
+- Better Auth may auto-rotate — verify this
+- Add monitoring for Apple auth failure rate
 
-# Production workflow:
-npx drizzle-kit generate    # creates SQL files in drizzle/
-git add drizzle/            # commit migration files
-git push                    # Vercel deploys
-
-# Production migration (run via script or CI):
-npx drizzle-kit migrate     # applies pending migrations
-```
-
-**Detection:** If `drizzle/` directory is empty or migrations don't exist, `push` is being used. CI should check that `drizzle-kit generate` produces no new files (schema matches migrations).
+**Which Phase Should Address It:** Apple OAuth phase — include key rotation documentation
 
 ---
 
-### Pitfall 5: CORS Origin Validation Breaks Mobile App Deep Links
-**What goes wrong:** Restricting CORS to `FRONTEND_URL` breaks the Expo mobile app's `chi-expense://` custom scheme and Expo Go's `exp://` scheme. These are not standard HTTPS origins.
+## Pitfall 4: API Versioning Breaking Mobile Apps (Medium Risk)
 
-**Why it happens:** The CORS middleware (`cors` package used by NestJS) validates the `Origin` header. Mobile apps using custom URL schemes (Expo, React Native) send `chi-expense://` or `exp://` as the origin, which fails strict origin validation.
+**Problem:** Adding `/api/v1/` breaks existing mobile apps that call `/api/`.
 
-**Consequences:** Mobile app cannot make API requests. Auth callbacks fail (Better Auth uses cookies with `SameSite: 'none'` and requires exact `Origin` matching).
+**Scenario:**
+1. Deploy API versioning
+2. Mobile app (v1.0) still calls `/api/transactions`
+3. Returns 404
+4. App crashes for all existing users
 
 **Prevention:**
-```typescript
-// src/main.ts — dynamic origin validation
-const allowedOrigins = [
-  process.env.FRONTEND_URL,
-  'chi-expense://',
-  'exp://',
-].filter(Boolean) as string[];
+- Keep unversioned routes working (backward compatible)
+- Add `/api/v1/` alongside `/api/`
+- Mobile app migrates in a subsequent release
+- Only deprecate unversioned after 100% mobile adoption
 
-app.enableCors({
-  origin: (origin, callback) => {
-    // Mobile apps may not send Origin header (Expo fetch)
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-});
-```
-
-**Detection:** Test from Expo Go on a physical device. If API calls fail with CORS errors, the custom scheme is not in the allowlist.
+**Which Phase Should Address It:** API Versioning phase — dual-route support is mandatory
 
 ---
 
-## Moderate Pitfalls
+## Pitfall 5: AsyncLocalStorage Memory Leaks (Medium Risk)
 
-### Pitfall 6: Environment Validation Rejects Optional Production-Only Vars
-**What goes wrong:** Using `skipMissingProperties: false` in `validateSync()` rejects optional env vars (like `SENTRY_DSN`, `POSTHOG_API_KEY`) that should only be required in production.
+**Problem:** If AsyncLocalStorage store isn't cleaned up, memory grows with each request.
 
-**Why it happens:** The `class-validator` validation function runs in all environments. Env vars that are production-only will be missing in development/test.
-
-**Consequences:** App fails to start in development because `SENTRY_DSN` is not set locally.
-
-**Prevention:** Mark production-only vars with `@IsOptional()` and gate their usage in code:
-```typescript
-// In the Sentry init:
-Sentry.init({
-  dsn: process.env.SENTRY_DSN,
-  enabled: process.env.NODE_ENV === 'production',  // disable in dev
-});
-```
-
----
-
-### Pitfall 7: better-sqlite3 Native Addon Build in CI
-**What goes wrong:** `better-sqlite3` requires native compilation. In GitHub Actions CI, the `ubuntu-latest` runner may need build tools (`build-essential`, `python3`) or the installation of pre-built binaries may fail.
-
-**Why it happens:** `better-sqlite3` is a native Node.js addon (C++ bindings to SQLite). npm install compiles it from source if no pre-built binary matches the platform.
-
-**Consequences:** CI fails with `node-gyp` errors. Tests cannot run.
+**Warning Signs:**
+- Memory usage grows over time (Vercel Function OOM)
+- "AsyncLocalStorage store not empty" warnings
 
 **Prevention:**
-1. Use `ubuntu-latest` (pre-built binaries available for glibc Linux)
-2. If pre-built fails: `sudo apt-get install build-essential python3` in CI step
-3. Fallback option: Use `@libsql/client` with a local file (`file:test.db`) for CI — no native compilation needed
-4. Add `better-sqlite3` to `optionalDependencies` so CI can proceed without it if fallback is in place
+- Use NestJS interceptor pattern (automatic cleanup)
+- Don't store large objects in ALS
+- Test with load (artillery or k6)
+
+**Which Phase Should Address It:** Request ID phase — interceptor-based implementation
 
 ---
 
-### Pitfall 8: Swagger Decorators Break Tree-Shaking
-**What goes wrong:** Adding `@ApiProperty()` decorators to every DTO increases the bundle size. NestJS (with Webpack) doesn't tree-shake decorator metadata.
+## Pitfall 6: Graceful Shutdown + Cached Server (Medium Risk)
 
-**Why it happens:** Decorators are runtime code. `@ApiProperty()` adds metadata to the class prototype. Vercel bundles the entire decorated module.
+**Problem:** Vercel's cached server pattern complicates graceful shutdown.
 
-**Consequences:** Increased cold start time. For this project's scale (<20 DTOs), the impact is negligible (~5KB). At scale, use `@nestjs/swagger` CLI plugin to strip decorators at build time.
-
-**Prevention:** For this project: no action needed. Impact is ~5KB. For larger projects: enable the `@nestjs/swagger` compiler plugin:
-```json
-// nest-cli.json
-{
-  "compilerOptions": {
-    "plugins": ["@nestjs/swagger"]
-  }
-}
-```
-This auto-generates Swagger metadata from TypeScript types, eliminating the need for `@ApiProperty()` decorators entirely.
-
----
-
-### Pitfall 9: PostHog identify() Called Without Session on Unauthenticated Routes
-**What goes wrong:** Calling `posthog.capture()` with a placeholder `distinctId` before authentication (e.g., on the health endpoint or rate-limited anonymous requests).
-
-**Why it happens:** The PostHog SDK expects a `distinctId` for every event. On unauthenticated routes, there's no user ID yet.
-
-**Consequences:** Anonymous events pollute the user analytics dashboard. Cannot distinguish between "1 user making 100 requests" and "100 users making 1 request."
+**Scenario:**
+1. First request boots server (cached)
+2. Server stays warm
+3. Vercel sends SIGTERM during idle
+4. Cached server reference prevents clean shutdown
+5. Next request uses stale server instance
 
 **Prevention:**
-```typescript
-// Use session ID when available, fall back to 'anonymous'
-const distinctId = session?.user?.id ?? 'anonymous';
-posthog.capture({ distinctId, event: 'api_request', ... });
-```
-Better: don't track anonymous events. Only track from authenticated controllers.
+- Track in-flight requests with a counter
+- On SIGTERM: set shuttingDown flag, wait for counter = 0
+- Clear cachedServer reference
+- Vercel will create new instance on next request
+
+**Which Phase Should Address It:** Graceful Shutdown phase — test with Vercel preview
 
 ---
 
-### Pitfall 10: Multiple drizzle-kit generate Calls Produce Different SQL
-**What goes wrong:** Running `drizzle-kit generate` after schema changes that only reorder columns or change defaults produces SQL migration files that are semantically empty but different.
+## Pitfall 7: Redis Connection Leaks (Low Risk)
 
-**Why it happens:** Drizzle Kit generates SQL based on the current schema representation, which can include column ordering and formatting differences that don't affect the database state.
-
-**Consequences:** CI migration checks fail because "new" migrations are detected when the schema hasn't materially changed. Flaky CI.
+**Problem:** Each request might create a new Redis connection.
 
 **Prevention:**
-1. Only run `generate` when schema actually changes (new columns, types, constraints)
-2. Run `drizzle-kit check` (if available) to verify schema matches migrations
-3. In CI, run `drizzle-kit generate --name ci-check` and fail if any new files are created
+- `getRedisClient()` is already a singleton
+- Verify this pattern is maintained for cache client
+
+**Which Phase Should Address It:** Redis Caching phase — verify singleton pattern
 
 ---
 
-## Minor Pitfalls
+## Pitfall 8: Image Resize Blocking Event Loop (Medium Risk)
 
-### Pitfall 11: Compression Middleware Order
-**What goes wrong:** Placing `compression()` before body parsing middleware. Compressed request bodies are not parsed correctly.
+**Problem:** Sharp operations are CPU-intensive and can block the event loop.
 
-**Why it happens:** Express middleware order matters. `compression()` should be after body parsers and auth middleware.
-
-**Consequences:** Request body parsing fails for compressed requests. Mobile app clients may not send compressed requests, so this might go unnoticed in testing but break in production with certain client libraries.
+**Warning Signs:**
+- Other requests timeout during image processing
+- Event loop lag spikes
 
 **Prevention:**
-```typescript
-app.use(helmet());
-app.enableCors({ ... });
-app.use(compression());  // after security, before routes — NOT before body parsing
-// NestJS body parsing happens inside the framework, after middleware
-```
+- Use Sharp's `toBuffer()` (async)
+- Limit concurrent image processing (1 at a time)
+- Consider streaming instead of buffering entire image
 
-**Note:** For NestJS with Better Auth's `bodyParser: false`, compression is fine at the standard location.
+**Which Phase Should Address It:** Image Resize phase — include concurrent processing limit
 
 ---
 
-### Pitfall 12: GitHub Actions Node Cache Not Working for Native Addons
-**What goes wrong:** `actions/setup-node@v4` with `cache: 'npm'` caches `node_modules`, including `better-sqlite3` native binaries. The cached binary may be compiled for a different OS version.
+## Pitfall 9: Over-Engineering Request Context (Low Risk)
 
-**Why it happens:** GitHub Actions runners are updated periodically. A binary compiled on `ubuntu-22.04` may not run on `ubuntu-24.04`.
+**Problem:** Storing too much in AsyncLocalStorage makes debugging hard.
 
-**Consequences:** CI tests fail with "invalid ELF header" or "GLIBC version mismatch" errors.
+**Prevention:**
+- Store only: request-id, user-id (optional), start time
+- Don't store: full request object, response object, large DTOs
 
-**Prevention:** Add `better-sqlite3` to the cache exclude list, or run `npm rebuild better-sqlite3` after `npm ci` in CI:
-```yaml
-- run: npm ci
-- run: npm rebuild better-sqlite3  # ensure native binary matches runner
-```
+**Which Phase Should Address It:** Request ID phase — keep context minimal
 
 ---
 
-## Phase-Specific Warnings
+## Summary: Risk Matrix
 
-| Phase Topic | Likely Pitfall | Mitigation |
-|-------------|---------------|------------|
-| Testing setup | DB singleton prevents injection (Pitfall 3) | Refactor to `DatabaseModule` + custom provider BEFORE writing tests |
-| Database migrations | Using `push` instead of `generate + migrate` (Pitfall 4) | Document migration workflow. Add CI check for drift |
-| CORS fix | Mobile app deep links break (Pitfall 5) | Test from Expo Go on physical device before merging |
-| Sentry integration | Init order wrong (Pitfall 1) | Verify Sentry receives `unhandledRejection` events |
-| PostHog integration | Events lost on serverless (Pitfall 2) | Set `flushAt: 1, flushInterval: 0` |
-| Env validation | Production-only vars block dev startup (Pitfall 6) | Mark optional vars with `@IsOptional()` |
-| CI/CD pipeline | better-sqlite3 build failure (Pitfall 7) | Rebuild in CI step or use `@libsql/client` fallback |
-| API documentation | Swagger decorator bloat (Pitfall 8) | Negligible at this scale. Monitor if DTO count grows >50 |
-| Compression | Middleware ordering (Pitfall 11) | Standard Express middleware order — no special handling needed |
-| Health checks | @nestjs/terminus breaking on Turso API | Test locally with Turso connection before relying on health check |
-
-## Sources
-
-- Context7 `/getsentry/sentry-javascript` — NestJS setup docs, initialization order requirement, `SentryGlobalFilter` registration (HIGH confidence)
-- Context7 `/nestjs/docs.nestjs.com` — Testing module, config validation, Swagger plugin docs (HIGH confidence)
-- PostHog Node SDK README (npm) — `flushAt`, `flushInterval`, serverless considerations (MEDIUM confidence — derived from SDK docs, not explicit serverless guide)
-- Drizzle ORM docs — `drizzle-kit push` vs `generate + migrate`, `better-sqlite3` driver (HIGH confidence)
-- Vercel docs — Function lifecycle, `maxDuration`, `runtime` config (HIGH confidence)
-- `cors` npm package docs — Dynamic origin validation, custom scheme support (MEDIUM confidence)
-- GitHub Actions `setup-node` docs — Cache behavior, native addon caveats (MEDIUM confidence)
+| Pitfall | Likelihood | Impact | Phase |
+|---------|-----------|--------|-------|
+| Sharp in serverless | Medium | High | Image Resize |
+| Cache stampede | Medium | Medium | Redis Caching |
+| Apple OAuth keys | High | High | Apple OAuth |
+| Versioning breaks mobile | High | High | API Versioning |
+| ALS memory leaks | Low | Medium | Request ID |
+| Shutdown + cached server | Medium | Medium | Graceful Shutdown |
+| Redis connection leaks | Low | Low | Redis Caching |
+| Image blocks event loop | Medium | Medium | Image Resize |
+| Over-engineering context | Low | Low | Request ID |
