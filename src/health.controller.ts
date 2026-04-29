@@ -12,7 +12,7 @@ import { sql } from 'drizzle-orm';
 import { getRedisClient } from './lib/redis';
 import { ShutdownService } from './lib/shutdown.service';
 
-@Controller({ path: 'api', version: '1' })
+@Controller()
 @ApiTags('Health')
 export class HealthController {
   private readonly logger = new Logger(HealthController.name);

@@ -1,11 +1,16 @@
 import { Controller, Get } from '@nestjs/common';
 import { Session, type UserSession } from '@thallesp/nestjs-better-auth';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { CategoriesService } from './categories.service';
 
 @ApiTags('Categories')
 @ApiBearerAuth('bearer')
-@Controller({ path: 'api/categories', version: '1' })
+@Controller({ path: 'categories', version: '1' })
 export class CategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 

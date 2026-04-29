@@ -1,6 +1,12 @@
 import { Controller, Post, Body, UseGuards } from '@nestjs/common';
 import { Session, type UserSession } from '@thallesp/nestjs-better-auth';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiBody,
+} from '@nestjs/swagger';
 import { InputService } from './input.service';
 import { TextInputDto } from './dto/text-input.dto';
 import { ImageInputDto } from './dto/image-input.dto';
@@ -9,7 +15,7 @@ import { RateLimitGuard } from './rate-limit.guard';
 @ApiTags('Input')
 @ApiBearerAuth('bearer')
 @ApiResponse({ status: 429, description: 'Rate limit exceeded' })
-@Controller({ path: 'api/input', version: '1' })
+@Controller({ path: 'input', version: '1' })
 export class InputController {
   constructor(private readonly inputService: InputService) {}
 
