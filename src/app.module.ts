@@ -6,9 +6,13 @@ import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { plainToInstance } from 'class-transformer';
 import { RequestContextInterceptor } from './lib/request-context.interceptor';
 import { requestContext } from './lib/request-context';
-import { IsString, IsNotEmpty, IsOptional, validateSync } from 'class-validator';
-import { SentryModule } from '@sentry/nestjs/setup';
-import { SentryGlobalFilter } from '@sentry/nestjs/setup';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  validateSync,
+} from 'class-validator';
+import { SentryModule, SentryGlobalFilter } from '@sentry/nestjs/setup';
 import { auth } from './lib/auth';
 import { DatabaseModule } from './db/database.module';
 import { TransactionsModule } from './transactions/transactions.module';
@@ -16,7 +20,6 @@ import { InsightsModule } from './insights/insights.module';
 import { CategoriesModule } from './categories/categories.module';
 import { InputModule } from './input/input.module';
 import { AccountModule } from './account/account.module';
-import { PushModule } from './push/push.module';
 import { HealthController } from './health.controller';
 import { ShutdownService } from './lib/shutdown.service';
 
@@ -84,8 +87,7 @@ function validate(config: Record<string, unknown>) {
 
   if (errors.length > 0) {
     const messages = errors.map(
-      (e) =>
-        `${e.property} is required but not set. Check your .env file.`,
+      (e) => `${e.property} is required but not set. Check your .env file.`,
     );
     throw new Error(`Environment validation failed:\n${messages.join('\n')}`);
   }
@@ -132,7 +134,6 @@ function validate(config: Record<string, unknown>) {
     CategoriesModule,
     InputModule,
     AccountModule,
-    PushModule,
   ],
   controllers: [HealthController],
   providers: [
