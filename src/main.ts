@@ -18,17 +18,18 @@ import { migrate } from 'drizzle-orm/libsql/migrator';
 import type { Express, Request, Response } from 'express';
 
 async function bootstrap(): Promise<Express> {
-  // Auto-migrate database on cold start (Vercel serverless + local dev).
-  // Migrations are idempotent — drizzle-kit tracks applied versions in the database,
-  // so re-running on warm instances is a no-op.
-  try {
-    console.log('[migration] Checking database migrations...');
-    await migrate(db, { migrationsFolder: './drizzle' });
-    console.log('[migration] Database migrations up to date.');
-  } catch (error) {
-    console.error('[migration] Migration failed:', error);
-    Sentry.captureException(error, { tags: { context: 'migration' } });
-    process.exit(1);
+  // Auto-migrate database on local dev only.
+  // On Vercel, run migrations manually via `npm run db:migrate` before deploying.
+  if (!process.env.VERCEL) {
+    try {
+      console.log('[migration] Checking database migrations...');
+      await migrate(db, { migrationsFolder: './drizzle' });
+      console.log('[migration] Database migrations up to date.');
+    } catch (error) {
+      console.error('[migration] Migration failed:', error);
+      Sentry.captureException(error, { tags: { context: 'migration' } });
+      process.exit(1);
+    }
   }
 
   const app = await NestFactory.create(AppModule, {
