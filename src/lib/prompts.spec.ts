@@ -6,16 +6,16 @@ describe('Prompts', () => {
     it('should wrap message in delimiters', () => {
       const result = USER_PROMPT_TEMPLATE('cà phê 35k');
 
-      expect(result).toContain('<<<USER_MESSAGE>>>');
+      expect(result).toContain('<tin_nhắn>');
       expect(result).toContain('cà phê 35k');
-      expect(result).toContain('<<<END_USER_MESSAGE>>>');
+      expect(result).toContain('</tin_nhắn>');
     });
 
     it('should handle empty string', () => {
       const result = USER_PROMPT_TEMPLATE('');
 
-      expect(result).toContain('<<<USER_MESSAGE>>>');
-      expect(result).toContain('<<<END_USER_MESSAGE>>>');
+      expect(result).toContain('<tin_nhắn>');
+      expect(result).toContain('</tin_nhắn>');
     });
 
     it('should preserve Vietnamese text', () => {
