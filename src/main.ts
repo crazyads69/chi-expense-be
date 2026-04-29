@@ -60,6 +60,8 @@ async function bootstrap(): Promise<Express> {
 
   app.useGlobalInterceptors(new TimeoutInterceptor());
 
+  app.setGlobalPrefix('api');
+
   const allowedOrigins = [
     process.env.FRONTEND_URL || 'http://localhost:8081',
     'chi-expense://',
