@@ -2,18 +2,21 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
-  Logger,
   Inject,
+  Logger,
 } from '@nestjs/common';
 import { DRIZZLE } from '../db/db-token';
 import type { DrizzleDatabase } from '../db/db-token';
-import { transactions, categories, notificationPreferences } from '../db/schema';
 import { eq, and, desc, gte, lt, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { parseMonth, getMonthBoundaries, nowISO } from '../lib/date-utils';
-import { PushService } from '../push/push.service';
+import {
+  transactions,
+  categories,
+  notificationPreferences,
+} from 'src/db/schema';
 
 @Injectable()
 export class TransactionsService {
@@ -22,7 +25,6 @@ export class TransactionsService {
   constructor(
     @Inject(DRIZZLE)
     private readonly db: DrizzleDatabase,
-    private readonly pushService: PushService,
   ) {}
   async listByMonth(
     userId: string,
@@ -115,7 +117,9 @@ export class TransactionsService {
     const [category] = await this.db
       .select()
       .from(categories)
-      .where(and(eq(categories.userId, userId), eq(categories.name, categoryName)))
+      .where(
+        and(eq(categories.userId, userId), eq(categories.name, categoryName)),
+      )
       .limit(1);
 
     if (!category || !category.budget || category.budget <= 0) {
@@ -149,15 +153,6 @@ export class TransactionsService {
       );
 
     const spent = spentResult?.total ?? 0;
-
-    if (spent >= thresholdAmount) {
-      await this.pushService.sendBudgetAlert(
-        userId,
-        categoryName,
-        spent,
-        category.budget,
-      );
-    }
   }
 
   async update(userId: string, id: string, dto: UpdateTransactionDto) {
