@@ -165,9 +165,7 @@ export class PushService {
   }
 
   private async removeStaleToken(token: string): Promise<void> {
-    await this.db
-      .delete(pushTokens)
-      .where(eq(pushTokens.token, token));
+    await this.db.delete(pushTokens).where(eq(pushTokens.token, token));
     this.logger.log(`Removed stale push token: ${token.slice(0, 16)}...`);
   }
 

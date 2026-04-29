@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { Expo } from 'expo-server-sdk';
 import { DatabaseModule } from '../db/database.module';
 import { PushController } from './push.controller';
 import { PushService } from './push.service';
@@ -13,7 +12,8 @@ export const EXPO_CLIENT = Symbol('EXPO_CLIENT');
     PushService,
     {
       provide: EXPO_CLIENT,
-      useFactory: () => {
+      useFactory: async () => {
+        const { Expo } = await import('expo-server-sdk');
         return new Expo({
           accessToken: process.env.EXPO_ACCESS_TOKEN,
         });
