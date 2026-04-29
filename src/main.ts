@@ -112,10 +112,30 @@ async function bootstrap(): Promise<Express> {
       'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.18.2/swagger-ui-bundle.js',
       'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.18.2/swagger-ui-standalone-preset.js',
     ],
+    useGlobalPrefix: false, // prevent double-prefixing
   });
 
   // Security: Add helmet for secure HTTP headers
-  app.use(helmet());
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: [
+            "'self'",
+            "'unsafe-inline'",
+            'https://cdnjs.cloudflare.com',
+          ],
+          styleSrc: [
+            "'self'",
+            "'unsafe-inline'",
+            'https://cdnjs.cloudflare.com',
+          ],
+          imgSrc: ["'self'", 'data:', 'https://cdnjs.cloudflare.com'],
+        },
+      },
+    }),
+  );
 
   await app.init();
 
