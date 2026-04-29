@@ -47,9 +47,6 @@ async function bootstrap(): Promise<Express> {
 
   app.useLogger(app.get(Logger));
 
-  // Security: Add helmet for secure HTTP headers
-  app.use(helmet());
-
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -116,6 +113,9 @@ async function bootstrap(): Promise<Express> {
       'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.18.2/swagger-ui-standalone-preset.js',
     ],
   });
+
+  // Security: Add helmet for secure HTTP headers
+  app.use(helmet());
 
   await app.init();
 
