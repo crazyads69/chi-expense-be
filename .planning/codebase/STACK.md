@@ -1,239 +1,196 @@
-# Tech Stack
+# Technology Stack
 
-**Analysis Date:** 2026-04-26
+**Analysis Date:** 2026-04-29
 
-## Languages & Runtime
+## Languages
 
-**Primary Language:**
-- TypeScript 5.7.3 — entire codebase (source and tests)
-  - Config: `tsconfig.json` (strict mode, ES2023 target, NodeNext modules)
-  - Build config: `tsconfig.build.json` (excludes tests)
+**Primary:**
+- **TypeScript** 5.7.3 - Used throughout the entire codebase (`src/**/*.ts`, `test/**/*.ts`)
+  - Target: `ES2023`
+  - Module: `nodenext` with `nodenext` module resolution
+  - Strict mode enabled
+  - Experimental decorators and `emitDecoratorMetadata` enabled for NestJS
 
-**Runtime:**
-- Node.js >= 20.x (required in `package.json` engines field)
-- npm >= 10.x
+## Runtime
 
-**Entry point:**
-- `src/main.ts` — NestJS bootstrap with Vercel serverless compatibility (exported `handler` function) and local dev fallback (`NODE_ENV !== 'production' && !process.env.VERCEL`)
+**Environment:**
+- **Node.js** 22.x (specified in `engines` field of `package.json`)
+- Runs as a traditional server locally and as a Vercel Serverless Function in production
 
-## Core Framework
+**Package Manager:**
+- **npm** (lockfile: `package-lock.json` present)
 
-**NestJS v11.0.1** — framework used across all modules:
+## Frameworks
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `@nestjs/common` | ^11.0.1 | Decorators, pipes, guards, interfaces |
-| `@nestjs/core` | ^11.0.1 | NestJS runtime, dependency injection |
-| `@nestjs/platform-express` | ^11.0.1 | Express HTTP adapter |
-| `@nestjs/config` | ^4.0.4 | Environment variable loading (`ConfigModule.forRoot({ isGlobal: true })` in `src/app.module.ts:15`) |
-| `@nestjs/cli` | ^11.0.0 | Build tooling (dev dependency) |
+**Core Web Framework:**
+- **NestJS** 11.0.1 - Primary application framework
+  - Platform: `@nestjs/platform-express` 11.0.1
+  - Entry point: `src/main.ts`
+  - Root module: `src/app.module.ts`
+  - URI-based API versioning enabled (default version `1`, prefix `api`)
+  - Global prefix: `/api`
 
-**Module system:** NestJS `@Module()` decorators. Feature modules are flat (no `imports` cross-references) — `InputModule`, `TransactionsModule`, `InsightsModule`, `CategoriesModule`, `AccountModule` all register only their own controllers and providers. The `AuthModule` from `@thallesp/nestjs-better-auth` is imported in `AppModule` (`src/app.module.ts:33-36`).
+**Testing:**
+- **Jest** 30.0.0 - Test runner
+  - **ts-jest** 29.2.5 - TypeScript transformation
+  - **@nestjs/testing** 11.0.1 - NestJS testing utilities
+  - **supertest** 7.0.0 - HTTP assertion library for E2E tests
+  - Config: inline in `package.json` under `"jest"` key
+  - E2E config: `test/jest-e2e.json`
+  - Setup file: `test/helpers/setup.ts`
 
-**CLI config:** `nest-cli.json` — source root is `src/`, compile option `deleteOutDir: true` cleans `dist/` before each build.
-
-**Build scripts:**
-```bash
-npm run build        # nest build
-npm run vercel-build # npm run build (Vercel deploy hook)
-npm run start:dev    # nest start --watch
-npm run start:prod   # node dist/main
-```
+**Build & Development:**
+- **Nest CLI** 11.0.0 (`@nestjs/cli`) - Build tooling and schematics
+  - Config: `nest-cli.json`
+  - `deleteOutDir: true` for clean builds
+- **TypeScript Compiler** 5.7.3
+- **ts-node** 10.9.2 - TypeScript execution for dev/debug
+- **ts-loader** 9.5.2 - Webpack loader (used by Nest CLI)
+- **tsconfig-paths** 4.2.0 - Path resolution for aliases
 
 ## Database & ORM
 
-**Database:** Turso (libSQL — SQLite-compatible, distributed edge database)
-- Client: `@libsql/client` ^0.17.2
-- Connection: configured in `src/db/client.ts:5-9`
-- Sync: supports optional `TURSO_SYNC_URL` for embedded replicas
+**Database:**
+- **Turso** (libSQL) - Edge SQLite database
+  - Client: `@libsql/client` 0.17.2 (HTTP transport for serverless compatibility)
+  - Local fallback: `file:local.db`
+  - Migrations stored in `./drizzle/`
 
-**ORM:** Drizzle ORM ^0.45.2
-- Driver: `drizzle-orm/libsql` (`src/db/client.ts:1`)
-- Schema: `src/db/schema.ts` — 5 tables defined with `sqliteTable`:
-  - `user` — Better Auth users table
-  - `session` — auth sessions with FK to user (cascade delete)
-  - `account` — OAuth provider accounts with FK to user (cascade delete)
-  - `verification` — email verification tokens
-  - `transactions` — expense records with compound index `idx_transactions_user_createdAt(userId, createdAt)` for performance
-  - `categories` — user-specific categories with unique index `idx_categories_user_slug(userId, slug)`
-- Migrations: `drizzle-kit` ^0.31.10 (dev dependency)
-  - Config: `drizzle.config.ts` — dialect `turso`, schema at `src/db/schema.ts`, output to `drizzle/`
+**ORM:**
+- **Drizzle ORM** 0.45.2
+  - Schema definition: `src/db/schema.ts`
+  - SQLite dialect (`drizzle-orm/sqlite-core`)
+  - Provider-specific dialect: `drizzle-orm/libsql`
+  - Migrations via `drizzle-kit` 0.31.10 (`db:migrate` script)
+  - Config: `drizzle.config.ts`
 
-**Schema types exported:** `Transaction`, `NewTransaction`, `Category`, `NewCategory` (`src/db/schema.ts:135-138`)
-
-**Key ORM patterns:**
-- `db.select().from(table).where(...)` — reads
-- `db.insert(table).values({...}).returning()` — writes with return
-- `db.update(table).set({...}).where(...).returning()` — updates
-- `db.delete(table).where(...).returning()` — deletes with existence check
-- `db.transaction(async (tx) => { ... })` — atomic multi-table operations (`src/account/account.service.ts:12`)
-
-**Timestamps:**
-- Better Auth tables (`user`, `session`, `account`, `verification`) use integer `timestamp_ms` with SQL `cast(unixepoch('subsecond') * 1000 as integer)` defaults
-- Application tables (`transactions`, `categories`) use ISO 8601 text strings (e.g., `new Date().toISOString()`)
-
-**ID generation:** `nanoid` ^5.1.7 for transaction and category IDs
+**Test Database:**
+- **better-sqlite3** 12.9.0 - In-memory SQLite for testing (`:memory:`)
+  - Used in `test/helpers/setup.ts` with `drizzle-orm/better-sqlite3`
 
 ## Authentication
 
-**Better Auth ^1.6.2** — full auth framework
+**Solution:** Better Auth 1.6.2
+- **Wrapper:** `@thallesp/nestjs-better-auth` 2.5.0 - NestJS module integration
+- **Expo Plugin:** `@better-auth/expo` 1.6.2 - Mobile app session support
+- **Plugins:** `bearer` (JWT/session token), `expo` (deep link / secure store)
+- **Adapter:** Drizzle adapter (`better-auth/adapters/drizzle`) with SQLite provider
+- **Social Providers:** GitHub OAuth, Apple Sign-In
+- **Config:** `src/lib/auth.ts`
+- Session is managed via Bearer tokens (`Authorization: Bearer <token>`)
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `better-auth` | ^1.6.2 | Core auth library |
-| `@better-auth/expo` | ^1.6.2 | Expo SDK for React Native mobile app |
-| `@thallesp/nestjs-better-auth` | ^2.4.0 | NestJS integration module (`AuthModule`) and `@Session()` decorator |
+## API Documentation
 
-**Auth config:** `src/lib/auth.ts`
-- **Database adapter:** `drizzleAdapter(db, { provider: 'sqlite' })` (line 10)
-- **Base URL & path:** `BETTER_AUTH_URL` env var, path `/api/auth`
-- **Social providers:** GitHub OAuth and Apple OAuth configured at lines 16-25
-- **Plugins:** `expo()` and `bearer()` (line 26) — Bearer token support for mobile API access
-- **Account linking:** enabled (line 28)
-- **User deletion:** enabled (line 31)
-- **Trusted origins:** `chi-expense://`, `exp://`, `FRONTEND_URL` (for mobile deep links and CORS)
-- **Cookie settings:** `crossSubDomainCookies: { enabled: true }`, `defaultSameSite: 'none'` for Expo OAuth callbacks (line 38-41)
-- **Secure cookies:** enabled in production only (line 34)
+- **@nestjs/swagger** 11.4.1 - OpenAPI/Swagger generation
+- **swagger-ui-express** 5.0.1 - Swagger UI serving
+- Interactive docs available at `/api/docs`
+- Bearer auth configured in Swagger
 
-**Auth in controllers:** All secured endpoints use the `@Session()` decorator from `@thallesp/nestjs-better-auth` to inject `UserSession` containing `session.user.id`. The `@AllowAnonymous()` decorator is used on the health endpoint (`src/health.controller.ts:8`).
+## Validation
 
-**Serverless consideration:** `bodyParser: false` is set in `NestFactory.create()` in `src/main.ts:14` because Better Auth requires raw body access.
+- **class-validator** 0.15.1 - DTO validation
+- **class-transformer** 0.5.1 - Object transformation
+- Global `ValidationPipe` configured in `src/main.ts` with `whitelist: true`, `transform: true`, `forbidNonWhitelisted: true`
+- Environment validation via `class-validator` in `src/app.module.ts`
 
-## AI/LLM
+## Logging
 
-**OpenRouter** — LLM API gateway
-- SDK: `openai` ^6.34.0 (standard OpenAI SDK pointed at OpenRouter's compatible API)
-- Client: lazy-initialized in `src/lib/openrouter.ts` with `baseURL: 'https://openrouter.ai/api/v1'`
-- Auth: `OPENROUTER_API_KEY` env var
+- **nestjs-pino** 4.6.1 - NestJS-integrated structured logging
+- **pino** 10.3.1 - Core logger
+- **pino-http** 11.0.0 - HTTP request logging
+- **pino-pretty** 13.1.3 (dev) - Human-readable logs in development
+- Redacts `authorization`, `cookie`, and `x-better-auth-session` headers
+- Request correlation IDs via custom `requestContext` (AsyncLocalStorage)
 
-**Models used:**
-1. **Text parsing:** `qwen/qwen3-8b` (`src/input/input.service.ts:85`) — lightweight model for Vietnamese expense text extraction
-   - Temperature: 0.1 (low, for deterministic parsing)
-   - Max tokens: 200
-2. **Image parsing:** `openai/gpt-4o-mini` (`src/input/input.service.ts:135`) — vision model for receipt image extraction
-   - Temperature: 0.1
-   - Max tokens: 300
+## Security
 
-**Prompt engineering:** Vietnamese-language system prompt and user prompt template in `src/lib/prompts.ts`
-- System prompt instructs the model to extract `amount`, `merchant`, `category`, `note` as JSON
-- Categories: Ăn uống, Di chuyển, Mua sắm, Giải trí, Hóa đơn, Sức khỏe, Giáo dục, Khác
-- User prompt template provides few-shot examples in Vietnamese
+- **helmet** 8.1.0 - Secure HTTP headers
+- Custom CORS configuration in `src/main.ts` allowing `chi-expense://`, `exp://`, and `FRONTEND_URL`
 
-**Fallback pipeline** (`src/input/input.service.ts`):
-1. First try local merchant-to-category lookup using `MERCHANT_CATEGORY_MAP` (75-entry map in `src/lib/merchant-table.ts`)
-2. If no local match, call OpenRouter LLM
-3. If LLM fails or returns unparseable response, fall back to regex-based amount parsing (`parseAmount()` method, lines 33-57) and text-based merchant extraction (`extractMerchant()`, lines 59-70)
-4. Amount is always made absolute (`Math.abs()`)
+## Image Processing
 
-**Regex amount parsing patterns** (`src/input/input.service.ts:39-43`):
-- `(\d{1,3}(?:,\d{3})*(?:[.,]\d+)?)\s*(?:k|nghìn|ng)` — Vietnamese money format with thousand suffix
-- `(\d+(?:[.,]\d+)?)\s*(?:k|nghìn)` — simpler number+k suffix
-- `(\d{1,3}(?:,\d{3})*(?:[.,]\d+)?)` — plain number format
-- Thousand multipliers (e.g., "35k" → 35000) via `AMOUNT_MULTIPLIER = 1000`
+- **sharp** 0.34.5 - Server-side image resizing
+  - Resizes receipt images to max 800px width
+  - Converts to JPEG at 85% quality (`mozjpeg`)
+  - Enforces 1MB max output size
+  - Used in: `src/lib/image-resize.ts`
+
+## AI / LLM
+
+- **openai** 6.34.0 - SDK used to call OpenRouter API
+  - Base URL: `https://openrouter.ai/api/v1`
+  - Timeout: 8000ms, max retries: 1
+  - Config: `src/lib/openrouter.ts`
+  - Model config: `src/lib/model-config.ts`
+  - Prompts: `src/lib/prompts.ts`
 
 ## Rate Limiting & Caching
 
-**Upstash Redis** — serverless Redis for rate limiting
-- `@upstash/redis` ^1.37.0 — REST-based Redis client
-- `@upstash/ratelimit` ^2.0.8 — ratelimit library with sliding window algorithm
+- **@upstash/redis** 1.37.0 - Serverless Redis client
+- **@upstash/ratelimit** 2.0.8 - Sliding window rate limiting
+  - Config: 20 requests/hour per user on LLM endpoints
+  - Analytics enabled
+  - Lazy initialization with test mocks
+  - Config: `src/lib/redis.ts`
 
-**Config:** `src/lib/redis.ts`
-- Lazy initialization of both `Redis` client and `Ratelimit` instance (lines 5-29)
-- Rate limit: **20 requests per hour** using **sliding window** algorithm (line 25)
-- Analytics enabled (line 26)
+## Monitoring & Observability
 
-**Rate limit guard:** `src/input/rate-limit.guard.ts`
-- Applied to `POST /api/input/text` and `POST /api/input/image` (`src/input/input.controller.ts:12,18`)
-- Identifier priority: authenticated user ID → Bearer token hash → IP address (with `x-forwarded-for` header support for proxies) → `'anonymous'`
-- Returns HTTP 429 on rate limit exceeded
+- **@sentry/nestjs** 10.50.0 - Error tracking and performance monitoring
+  - Traces sample rate: 10%
+  - Profiles sample rate: 0%
+  - `SentryGlobalFilter` for global error catching
+  - `SentryModule.forRoot()` in `AppModule`
+  - Config: `src/instrument.ts`
 
-**Environment vars:**
-- `UPSTASH_REDIS_REST_URL` — Upstash Redis REST endpoint
-- `UPSTASH_REDIS_REST_TOKEN` — auth token
+## Push Notifications
 
-## Validation & Transformation
+- **expo-server-sdk** 6.1.0 - Expo push notification service (dependency present, schema supports push tokens)
+- Push token storage in `push_tokens` table (`src/db/schema.ts`)
 
-**class-validator ^0.15.1 / class-transformer ^0.5.1** — DTO validation
+## Utilities
 
-**Global ValidationPipe** configured in `src/main.ts:23-29`:
-- `whitelist: true` — strips non-decorated properties
-- `transform: true` — auto-transforms types
-- `forbidNonWhitelisted: true` — rejects unknown properties
+- **nanoid** 5.1.7 - Unique ID generation
+- **jose** 6.2.2 - JWT/JWS/JWE operations
+- **rxjs** 7.8.1 - Reactive programming (NestJS dependency)
+- **reflect-metadata** 0.2.2 - Metadata reflection API (required by decorators)
 
-**DTOs use decorators:**
-- `@IsString()`, `@IsInt()`, `@IsOptional()`, `@Min()`, `@MaxLength()`, `@IsIn()`, `@IsNotEmpty()`
-- `TextInputDto` (`src/input/dto/text-input.dto.ts`): message max 500 chars
-- `ImageInputDto` (`src/input/dto/image-input.dto.ts`): base64 image max ~15MB (string length 15,000,000)
-- `CreateTransactionDto` (`src/transactions/dto/create-transaction.dto.ts`): amount min 1, source enum check, merchant max 255, category max 100, note max 1000
-- `UpdateTransactionDto` (`src/transactions/dto/update-transaction.dto.ts`): all fields optional
+## Linting & Formatting
 
-## Logging & Observability
+- **ESLint** 9.18.0 (flat config)
+  - **typescript-eslint** 8.20.0 - TypeScript rules
+  - **eslint-config-prettier** 10.0.1 - Disables conflicting rules
+  - **eslint-plugin-prettier** 5.2.2 - Runs Prettier as ESLint rule
+  - Config: `eslint.config.mjs`
+  - Key rules: `@typescript-eslint/no-explicit-any: off`, `@typescript-eslint/no-floating-promises: warn`
+- **Prettier** 3.4.2 - Code formatting
+  - Configured via ESLint plugin (`endOfLine: auto`)
 
-**Pino** — structured JSON logging
-- `nestjs-pino` ^4.6.1 — NestJS integration (LoggerModule)
-- `pino` ^10.3.1 — core logger
-- `pino-http` ^11.0.0 — HTTP request logging
-- `pino-pretty` ^13.1.3 — dev-mode pretty printing (dev dependency)
+## Configuration
 
-**Config:** `src/app.module.ts:16-32`
-- **Log level:** `'debug'` in development, `'info'` in production
-- **Transport:** uses `pino-pretty` in non-production for human-readable output
-- **Redaction:** sensitive headers redacted — `authorization`, `cookie`, `x-better-auth-session` — replaced with `'***REDACTED***'` (lines 23-29)
+**Environment Variables:**
+- Loaded via `dotenv` in `src/main.ts`
+- Validated via `class-validator` in `src/app.module.ts` (strict validation at startup)
+- Required vars: `BETTER_AUTH_SECRET`, `TURSO_CONNECTION_URL`, `TURSO_AUTH_TOKEN`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `OPENROUTER_API_KEY`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`
+- Optional vars: `SENTRY_DSN`, `APPLE_CLIENT_ID`, `APPLE_CLIENT_SECRET`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `FRONTEND_URL`, `VERCEL`, `NODE_ENV`, `PORT`
 
-**Logger usage:** Each service has a NestJS `Logger` instance:
-```typescript
-private readonly logger = new Logger(ServiceName.name);
-```
-Used in: `TransactionsService`, `InputService`, `InsightsService`, `CategoriesService`, `AccountService`, `HealthController`
+**Build Configuration:**
+- `tsconfig.json` - Base TypeScript config
+- `tsconfig.build.json` - Extends base, excludes `test` and `**/*spec.ts`
+- `vercel.json` - Vercel deployment config using `@vercel/node` builder
+- `drizzle.config.ts` - Drizzle Kit migration config
 
-**Error logging pattern:** `this.logger.error('message', error instanceof Error ? error.stack : error)` (`src/input/input.service.ts:115-118`)
+## Platform Requirements
 
-## Deployment & Infrastructure
+**Development:**
+- Node.js 22.x
+- npm
+- Turso CLI (optional, for local DB management)
 
-**Vercel** — serverless hosting
-- Config: `vercel.json`
-  - Vercel v2 format
-  - Runtime: `@vercel/node` serving `dist/main.js`
-  - Route: catch-all `/(.*)` mapped to `dist/main.js` with all HTTP methods
-- Build: `npm run vercel-build` (aliased to `npm run build`)
-- **Serverless pattern:** `src/main.ts:45-54` exports a `handler` function that lazily bootstraps NestJS once (cached in `cachedServer`), then delegates requests to the Express instance
-
-**Security middleware:**
-- `helmet` ^8.1.0 — security HTTP headers (applied in `src/main.ts:21`)
-- CORS: permissive (`origin: true`) for mobile app compatibility, with credentials enabled (`src/main.ts:31-36`)
-- HTTPS cookies in production (`useSecureCookies: process.env.NODE_ENV === 'production'`, `src/lib/auth.ts:34`)
-
-## Development Tools
-
-| Tool | Version | Config | Purpose |
-|------|---------|--------|---------|
-| TypeScript | ^5.7.3 | `tsconfig.json` | Type checking, strict mode |
-| ESLint | ^9.18.0 | `eslint.config.mjs` (flat config) | Linting |
-| Prettier | ^3.4.2 | `.prettierrc` | Code formatting |
-| Jest | ^30.0.0 | `package.json` jest section | Unit testing |
-| ts-jest | ^29.2.5 | Jest transform config | TypeScript test compilation |
-| Supertest | ^7.0.0 | devDependency | E2E HTTP testing |
-| ts-node | ^10.9.2 | devDependency | TypeScript execution (debug) |
-| tsconfig-paths | ^4.2.0 | devDependency | Path alias resolution |
-
-**ESLint config** (`eslint.config.mjs`):
-- Flat config format (ESLint v9+)
-- Extends: `@eslint/js` recommended + `typescript-eslint` recommended type-checked + `eslint-plugin-prettier` recommended
-- Key rules: `@typescript-eslint/no-explicit-any` disabled, `no-floating-promises` and `no-unsafe-argument` set to warn
-
-**Prettier config** (`.prettierrc`):
-- `singleQuote: true`
-- `trailingComma: "all"`
-
-**Jest config** (in `package.json`):
-- Root dir: `src/`
-- Test pattern: `*.spec.ts`
-- Transform: `ts-jest`
-- Coverage dir: `../coverage`
-- Environment: `node`
-
-**Format command:** `npm run format` — `prettier --write "src/**/*.ts" "test/**/*.ts"`
+**Production:**
+- Vercel Serverless Functions (`@vercel/node` builder)
+- Turso edge database
+- Upstash Redis for caching and rate limiting
 
 ---
 
-*Stack analysis: 2026-04-26*
+*Stack analysis: 2026-04-29*

@@ -1,247 +1,323 @@
-# Testing
+# Testing Patterns
 
-**Analysis Date:** 2026-04-26
+**Analysis Date:** 2026-04-29
 
-## Testing Framework & Configuration
+## Test Framework
 
-### Jest Configuration
+**Runner:**
+- **Jest** `^30.0.0`
+- **ts-jest** `^29.2.5` for TypeScript transformation
+- Config: Inline in `package.json` under the `"jest"` key
+  - `rootDir`: `"src"`
+  - `testRegex`: `".*\\.spec\\.ts$"`
+  - `testEnvironment`: `"node"`
+  - `setupFilesAfterEnv`: `["<rootDir>/../test/helpers/setup.ts"]`
+  - `transformIgnorePatterns`: `["node_modules/(?!(nanoid|better-auth|@thallesp/nestjs-better-auth)/)"]`
 
-**Jest version:** `^30.0.0` (from `package.json:66`)
-**TypeScript transform:** `ts-jest` `^29.2.5` (from `package.json:71`)
+**Assertion Library:**
+- Jest built-in assertions (`expect`, `toBe`, `toEqual`, `toThrow`, etc.)
 
-**Unit test config** (in `package.json:78-94`):
-```json
-{
-  "moduleFileExtensions": ["js", "json", "ts"],
-  "rootDir": "src",
-  "testRegex": ".*\\.spec\\.ts$",
-  "transform": { "^.+\\.(t|j)s$": "ts-jest" },
-  "collectCoverageFrom": ["**/*.(t|j)s"],
-  "coverageDirectory": "../coverage",
-  "testEnvironment": "node"
-}
-```
-
-**E2E test config** (`test/jest-e2e.json`):
-```json
-{
-  "moduleFileExtensions": ["js", "json", "ts"],
-  "rootDir": ".",
-  "testEnvironment": "node",
-  "testRegex": ".e2e-spec.ts$",
-  "transform": { "^.+\\.(t|j)s$": "ts-jest" }
-}
-```
-
-Key difference: unit tests look for `*.spec.ts` under `src/`; E2E tests look for `*.e2e-spec.ts` under `test/` (rootDir `.`).
-
-### Test Dependencies
-
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `@nestjs/testing` | `^11.0.1` | NestJS `Test.createTestingModule()` |
-| `supertest` | `^7.0.0` | HTTP assertions for E2E tests |
-| `@types/supertest` | `^7.0.0` | TypeScript types for supertest |
-| `@types/jest` | `^30.0.0` | Jest type definitions |
-
----
-
-## Test Commands
-
+**Run Commands:**
 ```bash
-npm test                # Run unit tests (jest)
-npm run test:watch      # Watch mode (jest --watch)
-npm run test:cov        # Unit tests with coverage report (jest --coverage)
-npm run test:debug      # Debug mode with inspector (node --inspect-brk ...)
-npm run test:e2e        # Run E2E tests (jest --config ./test/jest-e2e.json)
+npm run test           # Run all unit tests
+npm run test:watch     # Watch mode
+npm run test:cov       # Run with coverage report
+npm run test:debug     # Debug with Node inspector
+npm run test:e2e       # Run E2E tests (jest --config ./test/jest-e2e.json)
 ```
 
----
+## Test File Organization
 
-## Test Types
+**Location:**
+- **Co-located** with source files
+- Example: `src/transactions/transactions.service.ts` → `src/transactions/transactions.service.spec.ts`
+- Utility tests also co-located: `src/lib/date-utils.spec.ts`
 
-### Unit Tests
+**Naming:**
+- Pattern: `{source-file-name}.spec.ts`
 
-**Status: NONE FOUND**
-
-- **No `*.spec.ts` files exist anywhere in the `src/` directory.**
-- The `testRegex` in `package.json:85` is configured as `.*\\.spec\\.ts$` and `rootDir` is `src/`, so Jest would look for files like `src/transactions/transactions.service.spec.ts` — none exist.
-- Zero unit test coverage for any service, controller, guard, DTO, or utility.
-
-**Expected location for unit tests (per NestJS convention):**
+**Structure:**
 ```
-src/[feature]/
-├── [feature].service.ts
-├── [feature].service.spec.ts       # <-- co-located with source
-├── [feature].controller.ts
-├── [feature].controller.spec.ts    # <-- co-located with source
-└── dto/
-    ├── create-[entity].dto.ts
-    └── create-[entity].dto.spec.ts  # <-- co-located with source
+src/
+├── transactions/
+│   ├── transactions.controller.ts
+│   ├── transactions.service.ts
+│   ├── transactions.service.spec.ts
+│   └── dto/
+├── lib/
+│   ├── date-utils.ts
+│   ├── date-utils.spec.ts
+│   ├── prompts.spec.ts
+│   └── request-context.spec.ts
 ```
 
-### E2E Tests
+## Test Structure
 
-**Location:** `test/app.e2e-spec.ts` (29 lines)
-
-**What it tests:**
+**Suite Organization:**
 ```typescript
-// test/app.e2e-spec.ts (lines 7-28)
-describe('AppController (e2e)', () => {
-  let app: INestApplication<App>;
+describe('TransactionsService', () => {
+  let service: TransactionsService;
 
   beforeEach(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        TransactionsService,
+        { provide: DRIZZLE, useValue: testDb as any },
+      ],
     }).compile();
-    app = moduleFixture.createNestApplication();
-    await app.init();
-  });
 
-  it('/ (GET)', () => {
-    return request(app.getHttpServer())
-      .get('/')
-      .expect(200)
-      .expect('Hello World!');
+    service = module.get<TransactionsService>(TransactionsService);
   });
 
   afterEach(async () => {
-    await app.close();
+    // Clean up database tables
+  });
+
+  describe('listByMonth', () => {
+    it('should return transactions for user ordered by createdAt desc', async () => {
+      // Arrange
+      // Act
+      // Assert
+    });
   });
 });
 ```
 
-**What's actually tested:**
-- Boots the full `AppModule`
-- Makes a GET request to `/`
-- Expects HTTP 200 with body `'Hello World!'`
+**Patterns:**
+- **Arrange-Act-Assert** structure within each `it` block
+- `beforeEach` initializes the NestJS `TestingModule`
+- `afterEach` truncates test data from the in-memory database
+- `describe` blocks group tests by public method
 
-**Problems with this E2E test:**
-1. **No route at `/` returns "Hello World!"** — The `HealthController` responds at `api/health`, not `/`. The default NestJS "Hello World!" response only comes from the initial scaffold and does not exist in the current `main.ts` or any controller. This test will **fail** against the current codebase unless there's a catch-all or the app is unmodified stock NestJS.
-2. **Tests nothing meaningful** — It doesn't test authentication, CRUD endpoints, input parsing, rate limiting, or any business logic.
-3. **No database isolation** — The test boots the full `AppModule` which connects to a real database (via `TURSO_CONNECTION_URL` env var or `file:local.db`).
+## Mocking
 
----
+**Framework:**
+- Jest built-in mocking (`jest.mock`, `jest.fn`)
 
-## Test Patterns
+**Patterns:**
 
-### E2E Test Structure (from `test/app.e2e-spec.ts`)
-
-**Setup pattern:**
+Mock external modules at the top of the spec file:
 ```typescript
-const moduleFixture: TestingModule = await Test.createTestingModule({
-  imports: [AppModule],
-}).compile();
-app = moduleFixture.createNestApplication();
-await app.init();
+jest.mock('../lib/redis', () => ({
+  getRatelimitClient: jest.fn(),
+}));
 ```
 
-Uses `@nestjs/testing` `Test.createTestingModule()` with the real `AppModule` — no mocks, no overrides.
-
-**Assertion pattern:**
+Mock providers in `TestingModule` using `useValue`:
 ```typescript
-return request(app.getHttpServer())
-  .get('/')
-  .expect(200)
-  .expect('Hello World!');
+{ provide: DRIZZLE, useValue: testDb as any }
 ```
 
-Uses `supertest` chained `.expect()` for status code and body matching.
-
-**Teardown:**
+Mock return values inline:
 ```typescript
-afterEach(async () => {
-  await app.close();
+(getRatelimitClient as jest.Mock).mockReturnValue({
+  limit: jest.fn().mockResolvedValue({ success: true }),
 });
 ```
 
-### Mock Patterns
+**What to Mock:**
+- External infrastructure (Redis, LLM clients, auth) via `jest.mock`
+- Database provider (`DRIZZLE`) is replaced with the shared `testDb` instance
 
-**No mocking patterns observed in the codebase.** The E2E test uses real modules. No unit tests exist, so no mock patterns can be documented.
+**What NOT to Mock:**
+- The actual SQLite database is **not mocked** — tests run against a real in-memory database
+- Schema entities and Drizzle queries are executed for real
 
-**What would be needed for unit tests (not yet implemented):**
-- `@nestjs/testing` `Test.createTestingModule()` with `.overrideProvider()` for mocking services
-- `jest.fn()` for mock function creation
-- Potential mock libraries: `jest-mock-extended` (not installed), manual mocks
+## Fixtures and Factories
 
----
+**Test Data:**
+- Inline helper functions within each spec file create test data
+- No centralized fixture factory or `faker` library is used
+
+Example fixture helper:
+```typescript
+const createTestTransaction = async (
+  userId: string,
+  overrides: Partial<typeof transactions.$inferInsert> = {},
+) => {
+  await ensureUser(userId);
+  const defaults = {
+    id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    userId,
+    amount: -35000,
+    merchant: 'Cà phê',
+    category: 'Ăn uống',
+    source: 'text',
+    createdAt: '2026-04-15T10:00:00.000Z',
+    updatedAt: '2026-04-15T10:00:00.000Z',
+  };
+  const data = { ...defaults, ...overrides };
+  await testDb.insert(transactions).values(data);
+  return data;
+};
+```
+
+**User setup helper:**
+```typescript
+const ensureUser = async (userId: string) => {
+  const existing = await testDb.select().from(user).where(eq(user.id, userId));
+  if (existing.length === 0) {
+    await testDb.insert(user).values({
+      id: userId,
+      name: 'Test',
+      email: `${userId}@example.com`,
+      emailVerified: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+  }
+};
+```
+
+**Location:**
+- Helper functions are defined at the top of each `.spec.ts` file
+- Shared database setup lives in `test/helpers/setup.ts`
+
+## Database Testing Setup
+
+**Shared Test Database:**
+- File: `test/helpers/setup.ts`
+- Uses `better-sqlite3` with an in-memory database (`:memory:`)
+- Drizzle ORM is initialized with the full schema
+- Migrations are run from `./drizzle` at import time
+
+```typescript
+import { drizzle } from 'drizzle-orm/better-sqlite3';
+import Database from 'better-sqlite3';
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
+import * as schema from '../../src/db/schema';
+
+const sqlite = new Database(':memory:');
+export const testDb = drizzle(sqlite, { schema });
+migrate(testDb, { migrationsFolder: './drizzle' });
+```
+
+- Each spec file imports `testDb` and passes it as the `DRIZZLE` provider value
+- `afterEach` blocks delete rows to ensure test isolation
 
 ## Coverage
 
-### Configuration
+**Configuration:**
+- `collectCoverageFrom`: `["**/*.(t|j)s"]`
+- `coverageDirectory`: `"../coverage"`
 
-From `package.json:89-92`:
-```json
-"collectCoverageFrom": ["**/*.(t|j)s"],
-"coverageDirectory": "../coverage"
-```
+**Requirements:**
+- No explicit coverage threshold is enforced
+- CI runs tests with `--coverage=false` to speed up the pipeline
+- Coverage reports are generated locally via `npm run test:cov`
 
-### Current State
-
-**No coverage report available.** Since there are no unit tests (`*.spec.ts`), running `npm run test:cov` would produce 0% coverage across all files.
-
-**Run coverage:**
+**View Coverage:**
 ```bash
 npm run test:cov
-# Output written to ./coverage/
 ```
 
+## Test Types
+
+**Unit Tests:**
+- Service logic tested in isolation with real database queries
+- Guard logic tested with mocked execution contexts
+- Utility functions tested with direct inputs/outputs
+- Present in: `*.service.spec.ts`, `*.guard.spec.ts`, `*.spec.ts` (utils)
+
+**Integration Tests:**
+- Not explicitly separated. Service tests blur the line between unit and integration because they execute real SQL against SQLite.
+- No HTTP-level integration tests (Supertest) are present.
+
+**E2E Tests:**
+- **Not implemented.**
+- The `test:e2e` script references `./test/jest-e2e.json`, but the file does not exist.
+- The `test/` directory only contains `helpers/setup.ts`.
+
+## Common Patterns
+
+**Async Testing:**
+```typescript
+it('should throw BadRequestException for invalid month format', async () => {
+  await expect(
+    service.listByMonth('test-user', 'bad-month'),
+  ).rejects.toThrow(BadRequestException);
+});
+```
+
+**Error Testing (with status verification):**
+```typescript
+it('should throw 429 when rate limit exceeded', async () => {
+  (getRatelimitClient as jest.Mock).mockReturnValue({
+    limit: jest.fn().mockResolvedValue({ success: false }),
+  });
+
+  await expect(guard.canActivate(context)).rejects.toThrow(HttpException);
+
+  try {
+    await guard.canActivate(context);
+  } catch (error) {
+    expect(error).toBeInstanceOf(HttpException);
+    expect((error as HttpException).getStatus()).toBe(HttpStatus.TOO_MANY_REQUESTS);
+  }
+});
+```
+
+**Mock Execution Context (for Guards/Interceptors):**
+```typescript
+const createMockExecutionContext = (user?: { id: string }): ExecutionContext =>
+  ({
+    switchToHttp: () => ({
+      getRequest: () => ({ user }),
+    }),
+  }) as unknown as ExecutionContext;
+```
+
+## CI/CD Pipeline and Quality Gates
+
+**Pipeline:** `.github/workflows/ci.yml`
+
+Jobs run sequentially:
+1. **Lint** — `npm run lint`
+2. **Test** — `npm run test -- --coverage=false` (depends on lint)
+3. **Migration Check** — `npx drizzle-kit check` (depends on test)
+
+- **Node version:** 20 (`.github/workflows/ci.yml`) — note: `package.json` specifies `node: 22.x`
+- **Trigger:** Push and PR to `main` and `develop`
+- **Quality Gates:** Lint and unit tests must pass. No coverage gate.
+
+## Notable Test Utilities or Helpers
+
+- `test/helpers/setup.ts` — Shared in-memory SQLite database with migrations
+- Inline `ensureUser()` and `createTestTransaction()` helpers in multiple spec files
+- `jest.clearAllMocks()` in `beforeEach` for guard tests
+
+## Testing Conventions and Patterns
+
+- Use `Test.createTestingModule()` from `@nestjs/testing` to build the module under test
+- Always clean database tables in `afterEach` to prevent state leakage
+- Use `describe` to group tests by the method being tested
+- Use `it('should ...')` for test case descriptions
+- Prefer `rejects.toThrow` for async exception assertions
+- When asserting on exception properties (status code), use `try/catch` with `expect` inside the catch block
+
+## Known Testing Challenges or Gaps
+
+**Missing E2E Tests:**
+- No end-to-end tests exist despite the `test:e2e` npm script
+- No HTTP-level testing with Supertest for controllers
+- Risk: CORS, auth middleware, and request/response serialization are not automatically verified
+
+**Coverage Gaps:**
+- Several modules lack spec files:
+  - `src/transactions/transactions.controller.ts` — no controller tests
+  - `src/categories/categories.service.ts` — no tests
+  - `src/account/account.service.ts` — no tests
+  - `src/input/input.service.ts` — no tests
+  - `src/lib/timeout.interceptor.ts` — no tests
+- The `checkBudgetAlert` private method in `TransactionsService` is not directly tested
+
+**CI / Local Dev Mismatch:**
+- CI runs on Node 20; `package.json` engines specify Node 22.x
+- `test:e2e` script references a non-existent config file (`test/jest-e2e.json`)
+
+**Type Safety in Tests:**
+- `testDb as any` is used when providing the Drizzle database token to suppress type mismatches between `better-sqlite3` and `libsql` Drizzle instances
+
 ---
 
-## Test Gaps & Recommendations
-
-### Critical Gaps
-
-| Area | Missing Tests | Priority | Risk |
-|------|--------------|----------|------|
-| `TransactionsService` | Create, update, delete, listByMonth | **HIGH** | Core CRUD with amount negation logic, month validation, not-found errors |
-| `InputService` | parseText (rule-based + LLM fallback), parseImage | **HIGH** | Complex parsing logic, regex patterns, LLM integration, fallback behavior |
-| `InsightsService` | getMonthlyInsights, aggregation correctness | **HIGH** | Financial calculations (total, breakdown, daily) must be accurate |
-| `CategoriesService` | list with lazy init, concurrent init handling | **MEDIUM** | Default category creation, unique constraint handling |
-| `AccountService` | deleteAccount (transaction), exportData | **MEDIUM** | Cascading deletes, data export format |
-| `RateLimitGuard` | User-based and IP-based rate limiting | **MEDIUM** | Rate limit enforcement, header parsing |
-| All Controllers | Auth guard, parameter binding, response shapes | **MEDIUM** | Integration correctness |
-| DTOs | Validation rules (required fields, min/max) | **LOW** | class-validator decorator correctness |
-| E2E | Real API endpoints with auth | **HIGH** | The existing E2E test is non-functional |
-
-### What Should Be Tested
-
-**Unit test priorities (in order):**
-
-1. **`TransactionsService`** (`src/transactions/transactions.service.ts`)
-   - `create()`: amount negation (positive → negative), nanoid generation, note defaults to null
-   - `update()`: partial updates, amount re-negation, NotFoundException
-   - `delete()`: NotFoundException on missing ID
-   - `listByMonth()`: invalid month format → BadRequestException, valid month filtering, default current month
-
-2. **`InputService`** (`src/input/input.service.ts`)
-   - `parseText()`: rule-based lookup via merchant map, regex amount parsing (thousands, decimals), merchant extraction, LLM fallback, LLM error graceful degradation
-   - `parseImage()`: base64 handling, LLM response parsing, error fallback
-
-3. **`InsightsService`** (`src/insights/insights.service.ts`)
-   - `getMonthlyInsights()`: total calculation (absolute values), category breakdown sorting, daily expenses date sorting, empty result set
-
-4. **`CategoriesService`** (`src/categories/categories.service.ts`)
-   - `list()`: empty → lazy init, concurrent init → unique constraint re-fetch, existing categories → mapping to `CategoryResponse`
-
-5. **`AccountService`** (`src/account/account.service.ts`)
-   - `deleteAccount()`: transaction rollback on failure
-   - `exportData()`: correct structure
-
-**E2E test priorities:**
-
-1. Replace the non-functional `/` test with real endpoint tests
-2. Test `GET /api/health` → 200 with `{ status: 'ok', timestamp: ... }`
-3. Test authenticated routes with a valid session
-4. Test rate limiting on `/api/input/text` (expect 429 after threshold)
-
-### Test Infrastructure Needs
-
-- **Database mocking/override:** Tests need a way to isolate database operations (environment variable override for `TURSO_CONNECTION_URL`, in-memory SQLite, or mocked Drizzle client)
-- **Auth bypass:** E2E tests need a mechanism to inject authenticated sessions
-- **LLM mocking:** `InputService` tests should mock `getOpenAIClient()` to avoid real API calls
-- **Redis mocking:** `RateLimitGuard` tests should mock `getRatelimitClient()` to avoid real Redis calls
-
----
-
-*Testing analysis: 2026-04-26*
+*Testing analysis: 2026-04-29*

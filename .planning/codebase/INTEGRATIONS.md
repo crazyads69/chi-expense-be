@@ -1,438 +1,201 @@
-# Integrations
+# External Integrations
 
-**Analysis Date:** 2026-04-26
+**Analysis Date:** 2026-04-29
 
-## External Services
+## APIs & External Services
 
-### Turso (libSQL)
+### AI / LLM Parsing
+- **OpenRouter** (`https://openrouter.ai/api/v1`)
+  - Purpose: Parses raw Vietnamese text and receipt images into structured expense data
+  - SDK: `openai` 6.34.0 (configured with OpenRouter base URL)
+  - Auth: `OPENROUTER_API_KEY`
+  - Timeout: 8000ms, max retries: 1
+  - Text model default: `qwen/qwen3-8b`
+  - Image model default: `google/gemini-2.5-flash-lite`
+  - Fallback chain for image parsing: `google/gemini-2.5-flash-lite` → `qwen/qwen3.5-flash-02-23` → `openai/gpt-4o-mini`
+  - Config: `src/lib/openrouter.ts`, `src/lib/model-config.ts`
+  - Prompts: `src/lib/prompts.ts`
 
-**What it's used for:** Primary database — stores all user data, auth sessions, transactions, and categories.
+### Push Notifications
+- **Expo Push Notification Service**
+  - Purpose: Sending push notifications to mobile clients
+  - SDK: `expo-server-sdk` 6.1.0
+  - Push tokens stored in `push_tokens` table (`src/db/schema.ts`)
+  - Platform support: iOS and Android
 
-**How it's configured:**
-- Client: `@libsql/client` ^0.17.2
-- Config file: `drizzle.config.ts` (migration tooling)
-- Runtime client: `src/db/client.ts`
+## Data Storage
 
-**Environment variables:**
-```
-TURSO_CONNECTION_URL=libsql://your-database.turso.io
-TURSO_AUTH_TOKEN=your-turso-auth-token
-TURSO_SYNC_URL=      # Optional — for embedded replicas
-```
+### Primary Database
+- **Turso** (libSQL / SQLite-compatible edge database)
+  - Connection: `TURSO_CONNECTION_URL` (e.g., `libsql://your-db.turso.io`)
+  - Auth token: `TURSO_AUTH_TOKEN`
+  - Client: `@libsql/client` 0.17.2 (HTTP transport for serverless)
+  - ORM: Drizzle ORM 0.45.2 with SQLite dialect
+  - Schema: `src/db/schema.ts`
+  - Migrations: `./drizzle/` folder, managed by `drizzle-kit`
+  - Local fallback: `file:local.db` when env vars are missing
 
-**Where it's used in code:**
-- `src/db/client.ts:5-9` — Client creation with URL and auth token, drizzle instantiation
-- `src/db/schema.ts` — All table definitions (6 tables: user, session, account, verification, transactions, categories)
-- `src/transactions/transactions.service.ts:7-8` — Imported `db` and `transactions` schema for CRUD
-- `src/categories/categories.service.ts:2-3` — Imported `db` and `categories` schema
-- `src/insights/insights.service.ts:2-3` — Imported `db` and `transactions` for aggregations
-- `src/account/account.service.ts:2-3` — Imported `db` and all schemas for transactional deletion
-- `src/lib/auth.ts:5` — `db` imported for drizzleAdapter
+### Caching
+- **Upstash Redis** (Serverless Redis via REST API)
+  - Connection: `UPSTASH_REDIS_REST_URL`
+  - Auth token: `UPSTASH_REDIS_REST_TOKEN`
+  - Client: `@upstash/redis` 1.37.0
+  - Usage:
+    - Category list caching (`src/categories/categories.service.ts`) - 60-second TTL
+    - Rate limiting data storage
+    - Health check dependency verification
+  - Config: `src/lib/redis.ts`
+  - Lazy initialization; falls back to no-op mock in `test` environment
 
-**Connection pattern:** Single globally-initialized client (not lazy). The `db` export is used directly across all modules. Turso supports HTTP-based libSQL protocol for edge/serverless compatibility.
+### File Storage
+- **Local filesystem only** - No external object storage (S3, etc.)
+- Images are processed in-memory via `sharp` and sent as base64 to LLM APIs
+- No persistent image storage
 
-**Fallback:** Falls back to `file:local.db` if `TURSO_CONNECTION_URL` is not set (`src/db/client.ts:6`, `drizzle.config.ts:8`).
+## Authentication & Identity
 
----
+### Auth Framework
+- **Better Auth** 1.6.2
+  - Implementation: Self-hosted auth with Drizzle ORM adapter (`better-auth/adapters/drizzle`)
+  - Session: Bearer token (`Authorization: Bearer <token>`)
+  - Plugins: `expo` (mobile deep-link support), `bearer` (token-based auth)
+  - Config: `src/lib/auth.ts`
+  - NestJS wrapper: `@thallesp/nestjs-better-auth` 2.5.0
+  - Base URL: `BETTER_AUTH_URL` (default `http://localhost:3000`)
+  - Base path: `/api/auth`
 
-### OpenRouter
+### Social Login Providers
+- **GitHub OAuth**
+  - Client ID: `GITHUB_CLIENT_ID`
+  - Client Secret: `GITHUB_CLIENT_SECRET`
+  - Callback: `/api/auth/callback/github`
+  - Enabled unconditionally
 
-**What it's used for:** LLM-powered natural language expense parsing. Converts Vietnamese text messages and receipt images into structured expense data (amount, merchant, category, note).
+- **Apple Sign-In**
+  - Client ID: `APPLE_CLIENT_ID` (optional)
+  - Client Secret: `APPLE_CLIENT_SECRET` (optional)
+  - Team ID: `APPLE_TEAM_ID` (optional)
+  - Key ID: `APPLE_KEY_ID` (optional)
+  - Callback: `/api/auth/callback/apple`
+  - Setup guide: `docs/apple-oauth-setup.md`
+  - Key rotation required every 6 months
 
-**How it's configured:**
-- SDK: `openai` ^6.34.0 (OpenAI-compatible client pointed at OpenRouter)
-- Config file: `src/lib/openrouter.ts`
-- Base URL: `https://openrouter.ai/api/v1`
+## Monitoring & Observability
 
-**Environment variables:**
-```
-OPENROUTER_API_KEY=sk-or-v1-...
-```
+### Error Tracking
+- **Sentry**
+  - SDK: `@sentry/nestjs` 10.50.0
+  - DSN: `SENTRY_DSN` (optional)
+  - Environment: `NODE_ENV`
+  - Traces sample rate: 10% (`tracesSampleRate: 0.1`)
+  - Profiles sample rate: 0% (disabled)
+  - Send default PII enabled
+  - Instrumentation: `src/instrument.ts` (must be imported before any other modules)
+  - Global filter: `SentryGlobalFilter` catches unhandled exceptions
+  - Custom spans used for LLM parsing operations (`Sentry.startSpan` in `src/input/input.service.ts`)
 
-**Where it's used in code:**
-- `src/lib/openrouter.ts:5-9` — Lazy client factory function `getOpenAIClient()`
-- `src/input/input.service.ts:83-92` — `parseText()`: calls `openai.chat.completions.create()` with model `qwen/qwen3-8b`, temperature 0.1, max_tokens 200
-- `src/input/input.service.ts:133-158` — `parseImage()`: calls `openai.chat.completions.create()` with model `openai/gpt-4o-mini`, vision (image_url content), temperature 0.1, max_tokens 300
-- `src/lib/prompts.ts` — Vietnamese system prompt and user prompt template with few-shot examples
+### Logs
+- Structured JSON logging via `nestjs-pino` / `pino`
+- Redaction of sensitive headers (`authorization`, `cookie`, `x-better-auth-session`)
+- Request correlation IDs injected via AsyncLocalStorage (`src/lib/request-context.ts`)
 
-**Models used:**
+## Rate Limiting
 
-| Model | Purpose | Max Tokens | Temperature |
-|-------|---------|------------|-------------|
-| `qwen/qwen3-8b` | Vietnamese text expense analysis | 200 | 0.1 |
-| `openai/gpt-4o-mini` | Receipt image OCR & extraction | 300 | 0.1 |
+- **Upstash Ratelimit** (`@upstash/ratelimit` 2.0.8)
+  - Redis backend: Upstash Redis
+  - Algorithm: Sliding window
+  - Limit: 20 requests per hour per authenticated user
+  - Applied to: `POST /api/input/text` and `POST /api/input/image` via `RateLimitGuard`
+  - Analytics enabled
+  - Guard: `src/input/rate-limit.guard.ts`
 
-**Integration architecture:** The LLM call is a fallback in a three-tier parsing pipeline:
-1. **Local lookup** — `MERCHANT_CATEGORY_MAP` (75 entries in `src/lib/merchant-table.ts`) matches known merchant names to categories
-2. **LLM call** — OpenRouter API for unknown messages and all images
-3. **Regex fallback** — If LLM fails, `parseAmount()` and `extractMerchant()` provide basic parsing (`src/input/input.service.ts:33-70`)
+## Image Processing
 
-**Error handling:** On LLM failure, logs the error stack and returns a best-effort parse with `category: 'Khác'` (`src/input/input.service.ts:114-125`).
+- **sharp** 0.34.5
+  - Purpose: Resize receipt images before LLM processing
+  - Max width: 800px (preserving aspect ratio)
+  - Output: JPEG at 85% quality (`mozjpeg`)
+  - Max output size: 1MB
+  - Input: base64 data URI (`data:image/jpeg;base64,...` or `data:image/png;base64,...`)
+  - Output: base64 data URI
+  - Config: `src/lib/image-resize.ts`
 
----
+## CI/CD & Deployment
 
-### Upstash Redis
+### Hosting
+- **Vercel** - Serverless Functions deployment
+  - Builder: `@vercel/node`
+  - Entry: `src/main.ts`
+  - Config: `vercel.json`
+  - Environment: `NODE_OPTIONS=--experimental-require-module`
+  - Cache strategy: Express server instance cached across invocations (`cachedServer` in `src/main.ts`)
 
-**What it's used for:** Rate limiting on the AI-powered input parsing endpoints to control LLM API costs.
+### Database Migrations
+- Manual migrations on Vercel (`npm run db:migrate` before deploy)
+- Auto-migrations only run in local dev (check `!process.env.VERCEL` in `src/main.ts`)
 
-**How it's configured:**
-- Client: `@upstash/redis` ^1.37.0 (REST-based, no persistent connection needed for serverless)
-- Rate limiter: `@upstash/ratelimit` ^2.0.8
-- Config file: `src/lib/redis.ts`
+## Webhooks & Callbacks
 
-**Environment variables:**
-```
-UPSTASH_REDIS_REST_URL=https://your-redis.upstash.io
-UPSTASH_REDIS_REST_TOKEN=your-upstash-token
-```
+### Incoming
+- OAuth callbacks:
+  - `GET /api/auth/callback/github` - GitHub OAuth callback
+  - `GET /api/auth/callback/apple` - Apple Sign-In callback
+  - Handled by Better Auth internally
 
-**Where it's used in code:**
-- `src/lib/redis.ts:10-15` — Lazy `Redis` client factory `getRedisClient()`
-- `src/lib/redis.ts:21-28` — Lazy `Ratelimit` factory `getRatelimitClient()` with sliding window algorithm
-- `src/input/rate-limit.guard.ts:26-43` — Rate limit guard checks against user ID, token, or IP
+### Outgoing
+- No outgoing webhooks configured
+- LLM API calls to OpenRouter (`https://openrouter.ai/api/v1/chat/completions`)
+- Push notification sends to Expo Push Service (when implemented)
 
-**Rate limit parameters:**
-- Limit: 20 requests per hour
-- Algorithm: Sliding window
-- Analytics: Enabled
-- Guard applied to: `POST /api/input/text` and `POST /api/input/image` (`src/input/input.controller.ts:12,18`)
+## Environment Configuration
 
-**Identifier resolution order** (`src/input/rate-limit.guard.ts:22-41`):
-1. Authenticated user ID (`request.user?.id`)
-2. Bearer token from `Authorization` header
-3. Client IP (with `x-forwarded-for` proxy header support)
-4. Fallback string `'anonymous'`
+### Required Environment Variables
+| Variable | Integration | Purpose |
+|----------|-------------|---------|
+| `BETTER_AUTH_SECRET` | Better Auth | Cookie/session encryption secret |
+| `TURSO_CONNECTION_URL` | Turso | Database connection URL |
+| `TURSO_AUTH_TOKEN` | Turso | Database authentication token |
+| `GITHUB_CLIENT_ID` | GitHub OAuth | OAuth app client ID |
+| `GITHUB_CLIENT_SECRET` | GitHub OAuth | OAuth app client secret |
+| `OPENROUTER_API_KEY` | OpenRouter | LLM API authentication |
+| `UPSTASH_REDIS_REST_URL` | Upstash Redis | Redis REST endpoint |
+| `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis | Redis REST token |
 
-**Design note:** Both clients are lazy-initialized to prevent crashes during build/startup when environment variables may not be set (e.g., Vercel build phase).
+### Optional Environment Variables
+| Variable | Integration | Purpose |
+|----------|-------------|---------|
+| `SENTRY_DSN` | Sentry | Error tracking DSN |
+| `APPLE_CLIENT_ID` | Apple Sign-In | Services ID identifier |
+| `APPLE_CLIENT_SECRET` | Apple Sign-In | Private key contents |
+| `APPLE_TEAM_ID` | Apple Sign-In | Apple Developer Team ID |
+| `APPLE_KEY_ID` | Apple Sign-In | Private Key ID |
+| `FRONTEND_URL` | CORS | Allowed frontend origin |
+| `BETTER_AUTH_URL` | Better Auth | Public auth base URL |
+| `VERCEL` | Deployment | Vercel environment flag |
+| `NODE_ENV` | General | Runtime environment |
+| `PORT` | Local server | HTTP server port |
 
----
+### Environment Validation
+- All required variables are validated at application startup using `class-validator` in `src/app.module.ts`
+- Missing required variables cause the application to exit immediately with a descriptive error
+- Optional variables have sensible defaults or graceful degradation
 
-### GitHub OAuth
+## Configuration Patterns
 
-**What it's used for:** Social login authentication via Better Auth. Users can sign in with their GitHub accounts.
+### Lazy Initialization
+- Redis client and rate limiter are lazily initialized (`src/lib/redis.ts`)
+- OpenAI client is lazily initialized (`src/lib/openrouter.ts`)
+- Prevents crashes during build/startup if env vars are temporarily missing
 
-**How it's configured:**
-- Provider: Better Auth `socialProviders.github` in `src/lib/auth.ts:17-20`
-- Requires GitHub OAuth App registration (client ID and secret)
+### Test Mocks
+- Redis client returns a no-op mock in `test` environment (`src/lib/redis.ts`)
+- Test database uses `better-sqlite3` in-memory (`:memory:`) with Drizzle (`test/helpers/setup.ts`)
 
-**Environment variables:**
-```
-GITHUB_CLIENT_ID=your-github-client-id
-GITHUB_CLIENT_SECRET=your-github-client-secret
-```
-
-**Where it's used in code:**
-- `src/lib/auth.ts:17-20` — `socialProviders.github` configuration with `clientId` and `clientSecret`
-- Implicitly used by Better Auth's `/api/auth` routes for OAuth redirect/callback flow
-
-**Apple OAuth** is also configured at `src/lib/auth.ts:21-24` with `APPLE_CLIENT_ID` and `APPLE_CLIENT_SECRET` env vars (same pattern as GitHub).
-
-**Auth URL paths** handled by Better Auth (mounted under `basePath: '/api/auth'`):
-- `GET /api/auth/signin` — Sign-in page
-- `POST /api/auth/callback/github` — GitHub OAuth callback
-- `GET /api/auth/session` — Get current session
-- All standard Better Auth endpoints
-
----
-
-### Vercel
-
-**What it's used for:** Production hosting platform — serverless deployment of the NestJS application.
-
-**How it's configured:**
-- Config: `vercel.json`
-- Runtime: `@vercel/node` (Node.js serverless function)
-- Build command: `npm run vercel-build` → `npm run build`
-- Entry point: `dist/main.js`
-
-**Where it's used in code:**
-- `vercel.json:2-15` — Build config (v2 format), routes catch-all to `dist/main.js`
-- `src/main.ts:45-54` — Serverless entry point: exports a `handler` function that bootstraps NestJS once and caches the Express instance (`cachedServer`)
-- `src/main.ts:57-67` — Local dev fallback: if `NODE_ENV !== 'production' && !process.env.VERCEL`, starts the Express server on `PORT` (default 3000)
-
-**Serverless considerations in code:**
-- `bodyParser: false` in `NestFactory.create()` (`src/main.ts:14`) — Better Auth needs raw body
-- `crossSubDomainCookies: { enabled: true }` (`src/lib/auth.ts:38-40`) — Vercel deploys to different subdomains
-- `disableTrustedOriginsCors: true` in AuthModule (`src/app.module.ts:35`) — CORS handled manually in `main.ts`
-- Lazy initialization of Redis/OpenRouter clients — avoids failures during Vercel cold starts when env vars may be missing
-
-**Deployment environment variables required:**
-All listed in `.env.example`: `PORT`, `NODE_ENV`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `TURSO_CONNECTION_URL`, `TURSO_AUTH_TOKEN`, `OPENROUTER_API_KEY`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `FRONTEND_URL`
-
----
-
-## Internal Module Dependencies
-
-### Module Import Graph
-
-```
-AppModule (src/app.module.ts)
-  imports:
-    └── ConfigModule.forRoot({ isGlobal: true })  ← @nestjs/config
-    └── LoggerModule.forRoot({...})                ← nestjs-pino
-    └── AuthModule.forRoot({ auth, ... })          ← @thallesp/nestjs-better-auth
-    └── TransactionsModule                         ← src/transactions/
-    └── InsightsModule                             ← src/insights/
-    └── CategoriesModule                           ← src/categories/
-    └── InputModule                                ← src/input/
-    └── AccountModule                              ← src/account/
-  controllers:
-    └── HealthController                           ← src/health.controller.ts
-
-Feature Modules (all self-contained, no inter-module imports):
-  InputModule         → InputController + InputService
-  TransactionsModule  → TransactionsController + TransactionsService
-  InsightsModule      → InsightsController + InsightsService
-  CategoriesModule    → CategoriesController + CategoriesService
-  AccountModule       → AccountController + AccountService
-```
-
-**Key architectural observation:** Feature modules do NOT import each other. They are completely independent, sharing only global singletons (`db`, auth module, config). Each module directly imports `db` and schema from `src/db/` rather than going through a shared module.
-
----
-
-### Cross-Module Dependencies
-
-**Shared singletons (imported directly, not via NestJS DI):**
-
-| Shared Resource | Defined In | Used By |
-|----------------|------------|---------|
-| `db` (drizzle client) | `src/db/client.ts` | `TransactionsService`, `InsightsService`, `CategoriesService`, `AccountService`, `src/lib/auth.ts` |
-| `transactions` schema | `src/db/schema.ts` | `TransactionsService`, `InsightsService`, `AccountService` |
-| `categories` schema | `src/db/schema.ts` | `CategoriesService`, `AccountService` |
-| `user` / `session` / `account` schemas | `src/db/schema.ts` | `AccountService` (for deletion) |
-| `getOpenAIClient()` | `src/lib/openrouter.ts` | `InputService` |
-| `getRatelimitClient()` | `src/lib/redis.ts` | `RateLimitGuard` |
-| `MERCHANT_CATEGORY_MAP` | `src/lib/merchant-table.ts` | `InputService` |
-| `SYSTEM_PROMPT`, `USER_PROMPT_TEMPLATE` | `src/lib/prompts.ts` | `InputService` |
-
-**Auth integration (`@thallesp/nestjs-better-auth`):**
-- `UserSession` type and `@Session()` decorator used in: `InputController`, `TransactionsController`, `InsightsController`, `CategoriesController`, `AccountController`
-- `@AllowAnonymous()` decorator used in: `HealthController`
-- `auth` instance imported in `src/app.module.ts:5` for AuthModule config
+### Dual Transport Database
+- HTTP client for Turso (`@libsql/client/http`) used for serverless compatibility
+- Local `file:` protocol fallback for development
+- WebSocket transport explicitly avoided due to cold-start issues on serverless
 
 ---
 
-## Data Flow Diagrams
-
-### Authentication Flow
-
-```
-Mobile App (Expo)                     Vercel/Server                     Turso DB
-     │                                    │                                │
-     │  POST /api/auth/signin            │                                │
-     │  (GitHub OAuth redirect)  ────────►│                                │
-     │                                    │  betterAuth()                  │
-     │                                    │  ┌─ socialProviders.github ──┐ │
-     │  ← GitHub OAuth page ←────────────│  │  redirect to GitHub        │ │
-     │                                    │  └───────────────────────────┘ │
-     │  GitHub callback ─────────────────►│                                │
-     │                                    │  ┌─ drizzleAdapter ──────────┐ │
-     │                                    │  │  INSERT/UPDATE user       │─►│
-     │                                    │  │  INSERT account           │─►│
-     │                                    │  │  INSERT session           │─►│
-     │                                    │  └───────────────────────────┘ │
-     │  ← Set-Cookie + redirect ←────────│                                │
-     │                                    │                                │
-     │  API requests                     │                                │
-     │  Authorization: Bearer <token> ───►│  ┌─ bearer() plugin ─────────┐ │
-     │                                    │  │  Validate token           │ │
-     │                                    │  │  Resolve session.user     │─►│
-     │                                    │  └───────────────────────────┘ │
-     │  ← JSON response ←────────────────│  @Session() → session.user.id  │
-```
-
-**Key files:**
-- `src/lib/auth.ts` — Better Auth configuration (providers, plugins, adapters)
-- `src/main.ts:13-16` — NestJS bootstrap with `bodyParser: false`
-- `src/app.module.ts:33-36` — AuthModule import
-- All controllers — `@Session()` decorator injection
-
----
-
-### Expense Input Parsing Flow
-
-```
-Mobile App                     RateLimitGuard          InputService              OpenRouter
-     │                              │                       │                        │
-     │  POST /api/input/text       │                       │                        │
-     │  { message: "cà phê 35k" }  │                       │                        │
-     │  ──────────────────────────►│                       │                        │
-     │                              │  getRatelimitClient() │                        │
-     │                              │  ratelimit.limit(id)  │                        │
-     │                              │  ┌─ Upstash Redis ──┐ │                        │
-     │                              │  │  sliding window  │ │                        │
-     │                              │  │  20 req/hour     │ │                        │
-     │                              │  └──────────────────┘ │                        │
-     │                              │                       │                        │
-     │                              │  (if under limit)     │                        │
-     │                              │  ────────────────────►│                        │
-     │                              │                       │  parseText(userId, msg)│
-     │                              │                       │  ┌──────────────────┐  │
-     │                              │                       │  │ 1. lookupMerchant│  │
-     │                              │                       │  │    MERCHANT_MAP  │  │
-     │                              │                       │  │    "cà phê" →    │  │
-     │                              │                       │  │    "Ăn uống" ✓   │  │
-     │                              │                       │  └──────────────────┘  │
-     │                              │                       │  (if no match → LLM)   │
-     │                              │                       │  ┌──────────────────┐  │
-     │                              │                       │  │ 2. parseAmount() │  │
-     │                              │                       │  │    "35k" → 35000 │  │
-     │                              │                       │  └──────────────────┘  │
-     │                              │                       │  ┌──────────────────┐  │
-     │                              │                       │  │ 3. extractMerchant│ │
-     │                              │                       │  │    → "Cà phê"    │  │
-     │                              │                       │  └──────────────────┘  │
-     │                              │                       │                        │
-     │  ← { amount: 35000,         │                       │  Return ParsedExpense  │
-     │       merchant: "Cà phê",   │  ←────────────────────│                        │
-     │       category: "Ăn uống" } │                       │                        │
-```
-
-**LLM path (when local lookup fails):**
-```
-InputService.parseText()                   OpenRouter (qwen/qwen3-8b)
-     │                                            │
-     │  SYSTEM_PROMPT + USER_PROMPT_TEMPLATE       │
-     │  temperature: 0.1, max_tokens: 200          │
-     │  ──────────────────────────────────────────►│
-     │                                            │  Returns JSON:
-     │  ← { "amount": 35000,                      │  { "amount": 35000,
-     │       "merchant": "Cà phê",                │    "merchant": "Cà phê",
-     │       "category": "Ăn uống" }              │    "category": "Ăn uống" }
-     │                                            │
-     │  Extract JSON from response via regex       │
-     │  Fallback: parseAmount() + extractMerchant()│
-     │  Fallback category: "Khác"                  │
-```
-
-**Image path:**
-```
-InputService.parseImage()                   OpenRouter (gpt-4o-mini)
-     │                                            │
-     │  Vision request with base64 image          │
-     │  temperature: 0.1, max_tokens: 300          │
-     │  ──────────────────────────────────────────►│
-     │  ← JSON with amount, merchant, category     │
-     │  Fallback: { amount: 0, merchant: "Unknown",
-     │              category: "Khác" }             │
-```
-
-**Key files:**
-- `src/input/input.controller.ts` — Routes with `@UseGuards(RateLimitGuard)`
-- `src/input/input.service.ts` — Three-tier parsing logic
-- `src/input/rate-limit.guard.ts` — Rate limit enforcement
-- `src/lib/merchant-table.ts` — Local lookup table (75 entries)
-- `src/lib/prompts.ts` — LLM prompt templates
-- `src/lib/openrouter.ts` — OpenRouter client factory
-
----
-
-### CRUD Flow
-
-```
-Mobile App              Controller              Service                   Turso DB
-     │                      │                       │                        │
-     │  GET /api/transactions?month=2026-04         │                        │
-     │  ────────────────────►│                       │                        │
-     │                      │  @Session() → userId   │                        │
-     │                      │  ─────────────────────►│                        │
-     │                      │                       │  validateMonth(month)   │
-     │                      │                       │  db.select()            │
-     │                      │                       │   .from(transactions)   │
-     │                      │                       │   .where(               │
-     │                      │                       │     eq(userId) AND      │
-     │                      │                       │     like(createdAt,     │
-     │                      │                       │       "2026-04%")       │
-     │                      │                       │   )                     │
-     │                      │                       │  ──────────────────────►│
-     │                      │                       │  ← rows                 │
-     │  ← JSON array ←──────│  ←────────────────────│                        │
-     │                      │                       │                        │
-     │  POST /api/transactions                      │                        │
-     │  { amount: 35000,    │                       │                        │
-     │    merchant: "Cà phê",│                      │                        │
-     │    category: "Ăn uống",│                     │                        │
-     │    source: "text" }  │                       │                        │
-     │  ────────────────────►│                       │                        │
-     │                      │  @Session() → userId   │                        │
-     │                      │  ─────────────────────►│                        │
-     │                      │                       │  nanoid() → id          │
-     │                      │                       │  new Date().toISOString()│
-     │                      │                       │  amount = -Math.abs(    │
-     │                      │                       │    dto.amount)  (negate)│
-     │                      │                       │  db.insert(transactions)│
-     │                      │                       │   .values({id, userId,  │
-     │                      │                       │     amount, merchant,   │
-     │                      │                       │     category, source,   │
-     │                      │                       │     note, createdAt,    │
-     │                      │                       │     updatedAt})         │
-     │                      │                       │   .returning()          │
-     │                      │                       │  ──────────────────────►│
-     │                      │                       │  ← inserted row         │
-     │  ← transaction ←─────│  ←────────────────────│                        │
-     │                      │                       │                        │
-     │  PATCH /api/transactions/:id                 │                        │
-     │  { category: "Giải trí" }                    │                        │
-     │  ────────────────────►│                       │                        │
-     │                      │  @Session() → userId   │                        │
-     │                      │  ─────────────────────►│                        │
-     │                      │                       │  db.update(transactions)│
-     │                      │                       │   .set({category,      │
-     │                      │                       │     updatedAt})         │
-     │                      │                       │   .where(              │
-     │                      │                       │     eq(userId) AND      │
-     │                      │                       │     eq(id))             │
-     │                      │                       │   .returning()          │
-     │                      │                       │  ──────────────────────►│
-     │                      │                       │  ← updated row          │
-     │                      │                       │  if !result → 404       │
-     │  ← transaction ←─────│  ←────────────────────│                        │
-     │                      │                       │                        │
-     │  DELETE /api/transactions/:id                 │                        │
-     │  ────────────────────►│                       │                        │
-     │                      │  @Session() → userId   │                        │
-     │                      │  ─────────────────────►│                        │
-     │                      │                       │  db.delete(transactions)│
-     │                      │                       │   .where(              │
-     │                      │                       │     eq(userId) AND      │
-     │                      │                       │     eq(id))             │
-     │                      │                       │   .returning()          │
-     │                      │                       │  ──────────────────────►│
-     │                      │                       │  ← deleted row          │
-     │                      │                       │  if !result → 404       │
-     │  ← { success: true } ←│  ←───────────────────│                        │
-```
-
-**Account deletion flow** (transactional across all tables):
-```
-AccountService.deleteAccount()
-  db.transaction(async (tx) => {
-    1. tx.delete(transactions).where(eq(transactions.userId, userId))
-    2. tx.delete(categories).where(eq(categories.userId, userId))
-    3. tx.delete(session).where(eq(session.userId, userId))
-    4. tx.delete(account).where(eq(account.userId, userId))
-    5. tx.delete(user).where(eq(user.id, userId))
-  })
-  → All or nothing (atomic Drizzle transaction)
-```
-
-**Key observations:**
-- All CRUD operations are user-scoped via `userId` from `@Session()` decorator
-- Amounts are stored as **negative integers** internally (expenses are outflows); DTOs accept positive integers
-- IDs are generated with `nanoid()` not auto-increment
-- Timestamps use ISO 8601 strings for application tables, milliseconds since epoch for auth tables
-- List queries use `LIKE` prefix matching on ISO date strings for month filtering (leveraging the compound index `idx_transactions_user_createdAt`)
-- Results are ordered `desc(createdAt)` for newest-first UX
-
-**Key files:**
-- `src/transactions/transactions.controller.ts` — REST endpoints
-- `src/transactions/transactions.service.ts` — CRUD logic
-- `src/transactions/dto/create-transaction.dto.ts` — Input validation
-- `src/transactions/dto/update-transaction.dto.ts` — Update validation
-- `src/account/account.service.ts` — Transactional account deletion
-- `src/db/schema.ts:96-115` — Transactions table definition with compound index
-
----
-
-*Integration audit: 2026-04-26*
+*Integration audit: 2026-04-29*
